@@ -20,6 +20,17 @@ const MAX_HISTORY_ITEMS: usize = 300;
 const MAX_RENDERED_ITEMS: usize = 120;
 const UPGRADE_COMMAND: &str =
     "cargo install --git https://github.com/yash27-lab/primer-scout --branch main --force";
+const CONSOLE_COMMANDS: &[(&str, &str)] = &[
+    ("/help", "show all commands"),
+    ("/basics", "beginner quickstart"),
+    ("/examples", "more examples"),
+    ("/scan", "run scan engine"),
+    ("/upgrade", "print upgrade command"),
+    ("/version", "show installed version"),
+    ("/history", "show session history path"),
+    ("/clear", "clear current console"),
+    ("/exit", "save and quit"),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Role {
@@ -172,6 +183,14 @@ fn handle_message(message: String, entries: &mut Vec<Entry>) {
         return;
     }
 
+    if message == "primer" || message == "primer --splash" {
+        entries.push(Entry {
+            role: Role::Assistant,
+            text: "You are already inside primer console. Use /scan <args> or /help.".to_string(),
+        });
+        return;
+    }
+
     if let Some(scan_args) = message.strip_prefix("/scan") {
         let arg_str = scan_args.trim();
         if arg_str.is_empty() {
@@ -182,38 +201,12 @@ fn handle_message(message: String, entries: &mut Vec<Entry>) {
             return;
         }
 
-        let args = arg_str
-            .split_whitespace()
-            .map(ToOwned::to_owned)
-            .collect::<Vec<_>>();
+        run_scan_with_args(parse_cli_args(arg_str), entries);
+        return;
+    }
 
-        match Command::new("primer-scout").args(&args).output() {
-            Ok(output) => {
-                if output.status.success() {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    let text = summarize_output(stdout.trim(), "Scan completed.");
-                    entries.push(Entry {
-                        role: Role::Assistant,
-                        text,
-                    });
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    let text = summarize_output(stderr.trim(), "Scan failed.");
-                    entries.push(Entry {
-                        role: Role::Assistant,
-                        text: format!("Scan error: {text}"),
-                    });
-                }
-            }
-            Err(_) => {
-                entries.push(Entry {
-                    role: Role::Assistant,
-                    text:
-                        "Could not run `primer-scout` from console. Install binary in PATH first."
-                            .to_string(),
-                });
-            }
-        }
+    if let Some(args) = parse_direct_scan_args(&message) {
+        run_scan_with_args(args, entries);
         return;
     }
 
@@ -243,7 +236,7 @@ fn push_help(entries: &mut Vec<Entry>) {
     });
     entries.push(Entry {
         role: Role::Assistant,
-        text: "Use /scan to run the real engine. Example: /scan --primers data/demo_primers.tsv --reference data/demo.fa --summary"
+        text: "You can use /scan ... OR direct command style: `primer-scout --help` or `--primers ... --reference ...`"
             .to_string(),
     });
 }
@@ -266,6 +259,70 @@ fn push_examples(entries: &mut Vec<Entry>) {
         text: "Examples:\n/scan --primers data/demo_primers.tsv --reference data/demo.fa --json\n/scan --primers data/demo_primers.tsv --reference data/demo.fa --no-revcomp\n/scan --primers data/demo_primers.tsv --reference data/demo.fa --max-mismatches 2 --summary"
             .to_string(),
     });
+}
+
+fn parse_cli_args(arg_str: &str) -> Vec<String> {
+    arg_str
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>()
+}
+
+fn parse_direct_scan_args(message: &str) -> Option<Vec<String>> {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("primer-scout") {
+        return Some(parse_cli_args(rest.trim()));
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("primer ") {
+        let rest = rest.trim();
+        if rest.starts_with('-') {
+            return Some(parse_cli_args(rest));
+        }
+    }
+
+    if trimmed.starts_with('-') {
+        return Some(parse_cli_args(trimmed));
+    }
+
+    if trimmed.contains("--primers") || trimmed.contains("--reference") {
+        return Some(parse_cli_args(trimmed));
+    }
+
+    None
+}
+
+fn run_scan_with_args(args: Vec<String>, entries: &mut Vec<Entry>) {
+    match Command::new("primer-scout").args(&args).output() {
+        Ok(output) => {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let text = summarize_output(stdout.trim(), "Scan completed.");
+                entries.push(Entry {
+                    role: Role::Assistant,
+                    text,
+                });
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let text = summarize_output(stderr.trim(), "Scan failed.");
+                entries.push(Entry {
+                    role: Role::Assistant,
+                    text: format!("Scan error: {text}"),
+                });
+            }
+        }
+        Err(_) => {
+            entries.push(Entry {
+                role: Role::Assistant,
+                text: "Could not run `primer-scout` from console. Install binary in PATH first."
+                    .to_string(),
+            });
+        }
+    }
 }
 
 fn summarize_output(raw: &str, fallback: &str) -> String {
@@ -345,7 +402,9 @@ fn draw(
     )?;
 
     let message_top = separator_row.saturating_add(1);
-    let message_bottom = input_row.saturating_sub(2);
+    let suggestion_lines = build_suggestion_lines(input, cols_usize.saturating_sub(1));
+    let suggestion_rows = suggestion_lines.len() as u16;
+    let message_bottom = input_row.saturating_sub(2 + suggestion_rows);
     let available_rows = message_bottom.saturating_sub(message_top).saturating_add(1) as usize;
 
     let wrapped = flatten_entries(entries, cols_usize.saturating_sub(2));
@@ -358,6 +417,19 @@ fn draw(
             break;
         }
         queue!(out, MoveTo(0, y), Print(line))?;
+    }
+
+    if !suggestion_lines.is_empty() {
+        let start_row = input_row.saturating_sub(1 + suggestion_rows);
+        for (idx, line) in suggestion_lines.iter().enumerate() {
+            queue!(
+                out,
+                MoveTo(0, start_row + idx as u16),
+                SetForegroundColor(Color::DarkGrey),
+                Print(line),
+                ResetColor
+            )?;
+        }
     }
 
     let prompt = format!("{command_name}> {input}");
@@ -373,6 +445,42 @@ fn draw(
     out.flush()?;
     let _ = rows_usize;
     Ok(())
+}
+
+fn build_suggestion_lines(input: &str, width: usize) -> Vec<String> {
+    if !input.starts_with('/') {
+        return Vec::new();
+    }
+
+    let typed = input.to_ascii_lowercase();
+    let mut matches = CONSOLE_COMMANDS
+        .iter()
+        .filter(|(cmd, _)| {
+            if typed == "/" {
+                true
+            } else {
+                cmd.starts_with(&typed) || cmd.contains(&typed)
+            }
+        })
+        .map(|(cmd, desc)| format!("{cmd:<10} {desc}"))
+        .collect::<Vec<_>>();
+
+    if matches.is_empty() {
+        return vec![clip_to_width("suggestions: no matching command", width)];
+    }
+
+    matches.truncate(3);
+    matches
+        .into_iter()
+        .enumerate()
+        .map(|(idx, row)| {
+            if idx == 0 {
+                clip_to_width(&format!("suggestions: {row}"), width)
+            } else {
+                clip_to_width(&format!("             {row}"), width)
+            }
+        })
+        .collect()
 }
 
 fn flatten_entries(entries: &[Entry], width: usize) -> Vec<String> {

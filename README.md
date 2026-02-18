@@ -172,6 +172,8 @@ primer --splash
 - automatically saves session history before exit
 - auto-restores previous history on next launch
 - shows update banner when a newer GitHub release is available
+- typing `/` shows live command suggestions (type-ahead filter)
+- accepts both `/scan ...` and direct `primer-scout ...` style commands
 
 Inside console:
 
@@ -180,6 +182,8 @@ Inside console:
 /basics
 /examples
 /scan --primers data/demo_primers.tsv --reference data/demo.fa --summary
+primer-scout --primers data/demo_primers.tsv --reference data/demo.fa --count-only
+--primers data/demo_primers.tsv --reference data/demo.fa --summary
 /upgrade
 /version
 /history
@@ -267,6 +271,8 @@ Shows CLI options for direct non-interactive scan mode.
 - `/basics`: beginner quickstart commands.
 - `/examples`: more advanced scan examples.
 - `/scan <args>`: run real `primer-scout` scan command.
+- direct `primer-scout <args>`: also supported inside console.
+- direct `<args>` (starting with `--`): also supported inside console.
 - `/upgrade`: print one-line upgrade command.
 - `/version`: show installed version.
 - `/history`: show saved session file path.

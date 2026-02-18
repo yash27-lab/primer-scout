@@ -10,6 +10,8 @@ Added:
 - startup update banner when a newer GitHub release is available
 - `primer --splash` interactive full-screen console with persisted session history and restore
 - beginner console commands: `/basics`, `/examples`, `/upgrade`, `/version`, `/history`
+- command suggestion overlay when typing `/` in console
+- direct command passthrough in console (`primer-scout ...` and `--flags ...`)
 
 ## [0.1.0] - 2026-02-18
 
