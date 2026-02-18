@@ -59,7 +59,60 @@ Use `primer-scout` as a **high-throughput screening layer**, then move shortlist
 5. Large-scale filtering:
    Use count-only mode for fast dashboards and trend tracking.
 
-## Installation
+## Install and Run (macOS and Windows)
+
+### macOS (zsh/bash)
+
+```bash
+# 1) Install Rust toolchain
+xcode-select --install || true
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+source "$HOME/.cargo/env"
+
+# 2) Install primer-scout from GitHub release tag
+cargo install --git https://github.com/yash27-lab/primer-scout --tag v0.1.0 primer-scout
+
+# 3) Verify install
+primer-scout --help
+
+# 4) Smoke test
+git clone https://github.com/yash27-lab/primer-scout.git
+cd primer-scout
+primer-scout --primers data/demo_primers.tsv --reference data/demo.fa --count-only
+```
+
+Expected smoke-test output:
+
+```text
+27
+```
+
+### Windows (PowerShell)
+
+```powershell
+# 1) Install Rust toolchain
+winget install --id Rustlang.Rustup -e
+rustup default stable-x86_64-pc-windows-msvc
+
+# 2) Install primer-scout from GitHub release tag
+cargo install --git https://github.com/yash27-lab/primer-scout --tag v0.1.0 primer-scout
+
+# 3) Verify install
+primer-scout --help
+
+# 4) Smoke test
+git clone https://github.com/yash27-lab/primer-scout.git
+cd primer-scout
+primer-scout --primers data\demo_primers.tsv --reference data\demo.fa --count-only
+```
+
+Expected smoke-test output:
+
+```text
+27
+```
+
+### Build from local source
 
 ```bash
 cargo install --path .
