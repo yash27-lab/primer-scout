@@ -18,6 +18,11 @@ Many labs and bio teams face the same workflow gap:
 
 `primer-scout` targets that middle layer: quick, repeatable, production-friendly primer specificity checks.
 
+## Clinical Disclaimer
+
+`primer-scout` is for research and engineering workflows only.
+It is not a medical device and must not be used for medical diagnosis, treatment decisions, or patient-facing clinical decisions.
+
 ## Is It Solving What People Want?
 
 Yes, for these real needs:
