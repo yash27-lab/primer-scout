@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage question
+    url: https://github.com/your-username/primer-scout/discussions
+    about: Ask usage or workflow questions in Discussions.

@@ -1,0 +1,4 @@
+name	sequence
+p_atgc	ATGC
+p_gatc	GATC
+p_ambig	TGYA

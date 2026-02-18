@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a new capability or improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the user problem first, then the proposed solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user workflow is blocked or inefficient today?
+      placeholder: As a user, I need...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should primer-scout do?
+      placeholder: Add a flag/mode/output that...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workaround or alternative tools.
+
+  - type: textarea
+    id: cli
+    attributes:
+      label: Suggested CLI/API shape
+      description: Optional example command or output format.
+      render: shell
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected impact
+      description: Why this matters for real usage (speed, correctness, usability).
+    validations:
+      required: true
