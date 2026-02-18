@@ -5,11 +5,11 @@ use std::io::{self, IsTerminal};
 
 fn main() -> Result<()> {
     let args: Vec<_> = env::args_os().collect();
-    let wants_splash = args.len() == 1 || (args.len() == 2 && args[1] == OsStr::new("--splash"));
+    let wants_console = args.len() == 1 || (args.len() == 2 && args[1] == OsStr::new("--splash"));
 
-    if wants_splash && io::stdout().is_terminal() {
+    if wants_console && io::stdout().is_terminal() {
         let update_info = primer_scout::update::check_for_update(env!("CARGO_PKG_VERSION"));
-        primer_scout::splash::show_dna_splash("primer", update_info.as_ref())?;
+        primer_scout::console::run("primer", update_info.as_ref())?;
         return Ok(());
     }
 

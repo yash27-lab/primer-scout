@@ -7,6 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 pub mod cli;
+pub mod console;
 pub mod splash;
 pub mod update;
 

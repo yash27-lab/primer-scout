@@ -42,10 +42,7 @@ fn render_frame<W: Write>(
     update_info: Option<&crate::update::UpdateInfo>,
 ) -> io::Result<()> {
     write!(out, "{ESC}2J{ESC}H")?;
-    writeln!(
-        out,
-        "{BOLD}{CYAN}primer-scout{RESET} {BLUE}DNA startup mode{RESET}"
-    )?;
+    writeln!(out, "{BOLD}{CYAN}primer-scout{RESET} {BLUE}startup{RESET}")?;
     writeln!(
         out,
         "{DIM}Fast primer off-target scanning for FASTA references{RESET}"

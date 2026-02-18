@@ -88,7 +88,7 @@ Expected smoke-test output:
 ```
 
 Installed commands:
-- `primer` (DNA startup animation + CLI entrypoint)
+- `primer` (interactive console + CLI entrypoint)
 - `primer-scout` (direct scanner command)
 
 If `primer: command not found` appears:
@@ -160,7 +160,27 @@ DNA startup animation (no args):
 primer
 ```
 
-Startup checks latest GitHub release and shows an update banner when a newer version is available.
+Open console explicitly:
+
+```bash
+primer --splash
+```
+
+`primer` console behavior:
+- runs in its own full-screen terminal view (separate from normal bash prompt)
+- exit with `Ctrl+C` or by typing `x` then Enter
+- automatically saves session history before exit
+- auto-restores previous history on next launch
+- shows update banner when a newer GitHub release is available
+
+Inside console:
+
+```text
+/help
+/scan --primers data/demo_primers.tsv --reference data/demo.fa --summary
+/clear
+x
+```
 
 Direct help:
 
