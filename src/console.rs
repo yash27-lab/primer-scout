@@ -18,6 +18,8 @@ use std::time::Duration;
 
 const MAX_HISTORY_ITEMS: usize = 300;
 const MAX_RENDERED_ITEMS: usize = 120;
+const UPGRADE_COMMAND: &str =
+    "cargo install --git https://github.com/yash27-lab/primer-scout --branch main --force";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Role {
@@ -37,10 +39,7 @@ pub fn run(command_name: &str, update_info: Option<&UpdateInfo>) -> io::Result<(
     let mut entries = load_entries(&history_path).unwrap_or_default();
 
     if entries.is_empty() {
-        entries.push(Entry {
-            role: Role::Assistant,
-            text: "Welcome. Type /help for commands. Type x or Ctrl+C to exit.".to_string(),
-        });
+        push_beginner_banner(&mut entries);
     } else {
         entries.push(Entry {
             role: Role::System,
@@ -126,15 +125,40 @@ fn handle_message(message: String, entries: &mut Vec<Entry>) {
     });
 
     if message == "/help" {
+        push_help(entries);
+        return;
+    }
+
+    if message == "/basics" || message == "/start" {
+        push_basics(entries);
+        return;
+    }
+
+    if message == "/examples" {
+        push_examples(entries);
+        return;
+    }
+
+    if message == "/upgrade" {
         entries.push(Entry {
             role: Role::Assistant,
-            text: "Commands: /help, /scan <args>, /clear, x, /exit".to_string(),
+            text: format!("Run this command in shell:\n{UPGRADE_COMMAND}"),
         });
+        return;
+    }
+
+    if message == "/version" {
         entries.push(Entry {
             role: Role::Assistant,
-            text:
-                "Example: /scan --primers data/demo_primers.tsv --reference data/demo.fa --summary"
-                    .to_string(),
+            text: format!("primer-scout version: {}", env!("CARGO_PKG_VERSION")),
+        });
+        return;
+    }
+
+    if message == "/history" {
+        entries.push(Entry {
+            role: Role::Assistant,
+            text: format!("History file: {}", resolve_history_path().display()),
         });
         return;
     }
@@ -195,7 +219,51 @@ fn handle_message(message: String, entries: &mut Vec<Entry>) {
 
     entries.push(Entry {
         role: Role::Assistant,
-        text: "Local console active. Use /scan <args> to run searches, /help for commands."
+        text: "Unknown command. Use /help to see available commands.".to_string(),
+    });
+}
+
+fn push_beginner_banner(entries: &mut Vec<Entry>) {
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Welcome to primer console.".to_string(),
+    });
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Type /basics for beginner quickstart or /help for full command list.".to_string(),
+    });
+    push_basics(entries);
+}
+
+fn push_help(entries: &mut Vec<Entry>) {
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Commands:\n/help\n/basics\n/examples\n/scan <args>\n/upgrade\n/version\n/history\n/clear\nx or /exit"
+            .to_string(),
+    });
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Use /scan to run the real engine. Example: /scan --primers data/demo_primers.tsv --reference data/demo.fa --summary"
+            .to_string(),
+    });
+}
+
+fn push_basics(entries: &mut Vec<Entry>) {
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Beginner quickstart:\n1) /scan --primers data/demo_primers.tsv --reference data/demo.fa --count-only\n2) /scan --primers data/demo_primers.tsv --reference data/demo.fa --summary\n3) /scan --primers data/demo_primers.tsv --reference data/demo.fa --max-mismatches 1"
+            .to_string(),
+    });
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Need more? run /examples. Exit with Ctrl+C or x.".to_string(),
+    });
+}
+
+fn push_examples(entries: &mut Vec<Entry>) {
+    entries.push(Entry {
+        role: Role::Assistant,
+        text: "Examples:\n/scan --primers data/demo_primers.tsv --reference data/demo.fa --json\n/scan --primers data/demo_primers.tsv --reference data/demo.fa --no-revcomp\n/scan --primers data/demo_primers.tsv --reference data/demo.fa --max-mismatches 2 --summary"
             .to_string(),
     });
 }

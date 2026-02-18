@@ -69,8 +69,8 @@ xcode-select --install || true
 curl https://sh.rustup.rs -sSf | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# 2) Install primer-scout from GitHub release tag
-cargo install --git https://github.com/yash27-lab/primer-scout --tag v0.1.0 primer-scout
+# 2) Install primer-scout from GitHub
+cargo install --git https://github.com/yash27-lab/primer-scout --branch main --force
 
 # 3) Verify install
 primer-scout --help
@@ -112,8 +112,8 @@ source ~/.zshrc
 winget install --id Rustlang.Rustup -e
 rustup default stable-x86_64-pc-windows-msvc
 
-# 2) Install primer-scout from GitHub release tag
-cargo install --git https://github.com/yash27-lab/primer-scout --tag v0.1.0 primer-scout
+# 2) Install primer-scout from GitHub
+cargo install --git https://github.com/yash27-lab/primer-scout --branch main --force
 
 # 3) Verify install
 primer-scout --help
@@ -154,13 +154,13 @@ Reference input:
 
 ## Quick Start
 
-DNA startup animation (no args):
+Open interactive console:
 
 ```bash
 primer
 ```
 
-Open console explicitly:
+Open console explicitly (same mode):
 
 ```bash
 primer --splash
@@ -177,7 +177,12 @@ Inside console:
 
 ```text
 /help
+/basics
+/examples
 /scan --primers data/demo_primers.tsv --reference data/demo.fa --summary
+/upgrade
+/version
+/history
 /clear
 x
 ```
@@ -232,6 +237,92 @@ primer-scout \
   --primers data/demo_primers.tsv \
   --reference data/demo.fa \
   --no-revcomp
+```
+
+## Command Reference
+
+### `primer` (interactive)
+
+```bash
+primer
+```
+
+Starts full-screen console with session restore.
+
+```bash
+primer --splash
+```
+
+Explicitly opens the same full-screen console.
+
+```bash
+primer --help
+```
+
+Shows CLI options for direct non-interactive scan mode.
+
+### Console commands inside `primer`
+
+- `/help`: full command list and usage.
+- `/basics`: beginner quickstart commands.
+- `/examples`: more advanced scan examples.
+- `/scan <args>`: run real `primer-scout` scan command.
+- `/upgrade`: print one-line upgrade command.
+- `/version`: show installed version.
+- `/history`: show saved session file path.
+- `/clear`: clear visible console history.
+- `x` or `/exit` or `Ctrl+C`: save session and quit console.
+
+### `primer-scout` (direct scanner)
+
+```bash
+primer-scout --help
+```
+
+Shows all scanner flags.
+
+```bash
+primer-scout --primers <primers.tsv> --reference <ref.fa> --count-only
+```
+
+Returns only total hit count (fast sanity check).
+
+```bash
+primer-scout --primers <primers.tsv> --reference <ref.fa> --summary
+```
+
+Returns per-primer aggregated stats.
+
+```bash
+primer-scout --primers <primers.tsv> --reference <ref.fa> --json
+```
+
+Outputs NDJSON rows for pipeline ingestion.
+
+```bash
+primer-scout --primers <primers.tsv> --reference <ref.fa> --max-mismatches 2
+```
+
+Allows fuzzy matching with up to 2 substitutions.
+
+## Upgrade and Uninstall
+
+Upgrade to latest:
+
+```bash
+cargo install --git https://github.com/yash27-lab/primer-scout --branch main --force
+```
+
+Pin install to a release tag:
+
+```bash
+cargo install --git https://github.com/yash27-lab/primer-scout --tag v0.1.0 --force
+```
+
+Uninstall:
+
+```bash
+cargo uninstall primer-scout
 ```
 
 ## Output Contracts
