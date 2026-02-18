@@ -10,14 +10,16 @@ use crossterm::{execute, queue};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::env;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
 const MAX_HISTORY_ITEMS: usize = 300;
 const MAX_RENDERED_ITEMS: usize = 120;
+const HISTORY_DIR_NAME: &str = ".primer-scout";
+const HISTORY_FILE_NAME: &str = "console_history.ndjson";
 const UPGRADE_COMMAND: &str =
     "cargo install --git https://github.com/yash27-lab/primer-scout --branch main --force";
 const CONSOLE_COMMANDS: &[(&str, &str)] = &[
@@ -550,16 +552,46 @@ fn clip_to_width(text: &str, width: usize) -> String {
 }
 
 fn resolve_history_path() -> PathBuf {
-    if let Ok(path) = env::var("PRIMER_SCOUT_SESSION_FILE") {
-        return PathBuf::from(path);
+    let base_dir = default_history_dir();
+    let default_path = base_dir.join(HISTORY_FILE_NAME);
+
+    if let Ok(path) = env::var("PRIMER_SCOUT_SESSION_FILE")
+        && let Some(safe_path) = sanitize_history_override(&base_dir, &path)
+    {
+        return safe_path;
     }
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".primer-scout")
-        .join("console_history.ndjson")
+    default_path
 }
 
-fn load_entries(path: &PathBuf) -> io::Result<Vec<Entry>> {
+fn default_history_dir() -> PathBuf {
+    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(HISTORY_DIR_NAME)
+}
+
+fn sanitize_history_override(base_dir: &Path, raw: &str) -> Option<PathBuf> {
+    let candidate = PathBuf::from(raw.trim());
+    if candidate.as_os_str().is_empty() {
+        return None;
+    }
+
+    if candidate.is_absolute() {
+        return candidate.starts_with(base_dir).then_some(candidate);
+    }
+
+    if candidate.components().any(|part| {
+        matches!(
+            part,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return None;
+    }
+
+    Some(base_dir.join(candidate))
+}
+
+fn load_entries(path: &Path) -> io::Result<Vec<Entry>> {
+    reject_symlink(path)?;
     let content = fs::read_to_string(path)?;
     let mut entries = Vec::new();
     for line in content.lines() {
@@ -574,15 +606,82 @@ fn load_entries(path: &PathBuf) -> io::Result<Vec<Entry>> {
     Ok(entries)
 }
 
-fn save_entries(path: &PathBuf, entries: &[Entry]) -> io::Result<()> {
+fn save_entries(path: &Path, entries: &[Entry]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
+        secure_directory_permissions(parent)?;
     }
-    let mut file = fs::File::create(path)?;
+    reject_symlink(path)?;
+    let mut file = open_history_file(path)?;
     for entry in entries {
         let line = serde_json::to_string(entry)
             .map_err(|e| io::Error::other(format!("serialize history failed: {e}")))?;
         writeln!(file, "{line}")?;
+    }
+    file.flush()?;
+    secure_file_permissions(path)?;
+    Ok(())
+}
+
+fn open_history_file(path: &Path) -> io::Result<fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o600)
+            .open(path)
+    }
+    #[cfg(not(unix))]
+    {
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(path)
+    }
+}
+
+fn reject_symlink(path: &Path) -> io::Result<()> {
+    if let Ok(meta) = fs::symlink_metadata(path)
+        && meta.file_type().is_symlink()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "refusing to use symlink for session history: '{}'",
+                path.display()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn secure_directory_permissions(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
+fn secure_file_permissions(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
     }
     Ok(())
 }
@@ -608,5 +707,31 @@ impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
         let _ = disable_raw_mode();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_override_relative_stays_under_history_dir() {
+        let base = PathBuf::from("/tmp/user/.primer-scout");
+        let path = sanitize_history_override(&base, "alt.ndjson").expect("valid relative override");
+        assert_eq!(path, base.join("alt.ndjson"));
+    }
+
+    #[test]
+    fn session_override_rejects_parent_traversal() {
+        let base = PathBuf::from("/tmp/user/.primer-scout");
+        let path = sanitize_history_override(&base, "../secrets.txt");
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn session_override_rejects_absolute_outside_base_dir() {
+        let base = PathBuf::from("/tmp/user/.primer-scout");
+        let path = sanitize_history_override(&base, "/tmp/user/notes.txt");
+        assert!(path.is_none());
     }
 }

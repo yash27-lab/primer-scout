@@ -12,6 +12,9 @@ Added:
 - beginner console commands: `/basics`, `/examples`, `/upgrade`, `/version`, `/history`
 - command suggestion overlay when typing `/` in console
 - direct command passthrough in console (`primer-scout ...` and `--flags ...`)
+- hardened console session storage (`0700`/`0600` perms on Unix, symlink rejection, sanitized session path override)
+- input safety guardrails for untrusted data (line-size/file-size/contig-size limits with env overrides)
+- thread cap hardening for user-provided `--threads`
 
 ## [0.1.0] - 2026-02-18
 

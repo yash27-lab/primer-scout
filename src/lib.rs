@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
 use serde::Serialize;
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -10,6 +11,11 @@ pub mod cli;
 pub mod console;
 pub mod splash;
 pub mod update;
+
+const DEFAULT_MAX_PRIMER_FILE_BYTES: usize = 16 * 1024 * 1024;
+const DEFAULT_MAX_PRIMER_LINE_BYTES: usize = 32 * 1024;
+const DEFAULT_MAX_FASTA_LINE_BYTES: usize = 8 * 1024 * 1024;
+const DEFAULT_MAX_CONTIG_BASES: usize = 250_000_000;
 
 #[derive(Debug, Clone)]
 pub struct Primer {
@@ -103,15 +109,38 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
     let mut primers = Vec::new();
     let mut delimiter: Option<char> = None;
     let mut row_index = 0usize;
+    let max_file_bytes = read_limit_from_env(
+        "PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES",
+        DEFAULT_MAX_PRIMER_FILE_BYTES,
+    );
+    let max_line_bytes = read_limit_from_env(
+        "PRIMER_SCOUT_MAX_PRIMER_LINE_BYTES",
+        DEFAULT_MAX_PRIMER_LINE_BYTES,
+    );
+    let mut total_bytes = 0usize;
 
     loop {
         line.clear();
-        if reader
+        let read_bytes = reader
             .read_line(&mut line)
-            .with_context(|| format!("failed reading primer file '{}'", path.display()))?
-            == 0
-        {
+            .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
+        if read_bytes == 0 {
             break;
+        }
+        total_bytes = total_bytes.saturating_add(read_bytes);
+        if total_bytes > max_file_bytes {
+            bail!(
+                "primer file '{}' exceeds safety limit of {} bytes (override with PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES)",
+                path.display(),
+                max_file_bytes
+            );
+        }
+        if read_bytes > max_line_bytes {
+            bail!(
+                "primer line in '{}' exceeds safety limit of {} bytes (override with PRIMER_SCOUT_MAX_PRIMER_LINE_BYTES)",
+                path.display(),
+                max_line_bytes
+            );
         }
 
         let trimmed = line.trim();
@@ -237,6 +266,15 @@ pub fn scan_sequence(
     if primers.is_empty() {
         bail!("no primers supplied");
     }
+    let max_contig_bases =
+        read_limit_from_env("PRIMER_SCOUT_MAX_CONTIG_BASES", DEFAULT_MAX_CONTIG_BASES);
+    if sequence.len() > max_contig_bases {
+        bail!(
+            "input sequence '{}' exceeds safety limit of {} bases (override with PRIMER_SCOUT_MAX_CONTIG_BASES)",
+            contig_name,
+            max_contig_bases
+        );
+    }
 
     let contig = scan_contig("in-memory", contig_name, sequence, primers, options)?;
 
@@ -275,15 +313,27 @@ fn scan_reference_file(
     let mut collected_hits = Vec::new();
     let mut summary_acc = vec![SummaryAccumulator::default(); primers.len()];
     let mut total_hits = 0u64;
+    let max_contig_bases =
+        read_limit_from_env("PRIMER_SCOUT_MAX_CONTIG_BASES", DEFAULT_MAX_CONTIG_BASES);
+    let max_fasta_line_bytes = read_limit_from_env(
+        "PRIMER_SCOUT_MAX_FASTA_LINE_BYTES",
+        DEFAULT_MAX_FASTA_LINE_BYTES,
+    );
 
     loop {
         line.clear();
-        if reader
+        let read_bytes = reader
             .read_line(&mut line)
-            .with_context(|| format!("failed reading reference '{}'", reference.display()))?
-            == 0
-        {
+            .with_context(|| format!("failed reading reference '{}'", reference.display()))?;
+        if read_bytes == 0 {
             break;
+        }
+        if read_bytes > max_fasta_line_bytes {
+            bail!(
+                "FASTA line in '{}' exceeds safety limit of {} bytes (override with PRIMER_SCOUT_MAX_FASTA_LINE_BYTES)",
+                reference.display(),
+                max_fasta_line_bytes
+            );
         }
 
         let trimmed = line.trim_end_matches(['\n', '\r']).trim();
@@ -311,6 +361,15 @@ fn scan_reference_file(
                 bail!(
                     "invalid FASTA '{}': found sequence before header",
                     reference.display()
+                );
+            }
+            let next_len = sequence.len().saturating_add(trimmed.len());
+            if next_len > max_contig_bases {
+                bail!(
+                    "contig '{}' in '{}' exceeds safety limit of {} bases (override with PRIMER_SCOUT_MAX_CONTIG_BASES)",
+                    contig_name.as_deref().unwrap_or("unknown_contig"),
+                    reference.display(),
+                    max_contig_bases
                 );
             }
             sequence.push_str(trimmed);
@@ -570,6 +629,22 @@ fn infer_delimiter(line: &str) -> char {
     if line.contains('\t') { '\t' } else { ',' }
 }
 
+fn read_limit_from_env(name: &str, default: usize) -> usize {
+    env::var(name)
+        .ok()
+        .as_deref()
+        .and_then(parse_positive_usize)
+        .unwrap_or(default)
+}
+
+fn parse_positive_usize(value: &str) -> Option<usize> {
+    value
+        .trim()
+        .parse::<usize>()
+        .ok()
+        .filter(|parsed| *parsed > 0)
+}
+
 fn is_header(name: &str, sequence: &str) -> bool {
     let left = name.to_ascii_lowercase();
     let right = sequence.to_ascii_lowercase();
@@ -773,5 +848,14 @@ mod tests {
 
         assert_eq!(result.total_hits, 1);
         assert_eq!(result.hits[0].mismatches, 1);
+    }
+
+    #[test]
+    fn parse_positive_usize_rejects_non_positive_values() {
+        assert_eq!(parse_positive_usize("32"), Some(32));
+        assert_eq!(parse_positive_usize("  1 "), Some(1));
+        assert_eq!(parse_positive_usize("0"), None);
+        assert_eq!(parse_positive_usize("-1"), None);
+        assert_eq!(parse_positive_usize("abc"), None);
     }
 }

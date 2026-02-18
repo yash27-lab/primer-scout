@@ -311,6 +311,26 @@ primer-scout --primers <primers.tsv> --reference <ref.fa> --max-mismatches 2
 
 Allows fuzzy matching with up to 2 substitutions.
 
+## Security and Safety Defaults
+
+- Console session history is stored under `$HOME/.primer-scout/` with restricted permissions (`0700` dir, `0600` file on Unix).
+- `PRIMER_SCOUT_SESSION_FILE` is path-sanitized and cannot point outside `$HOME/.primer-scout/`.
+- Symlink targets are rejected for session history writes.
+- Resource guards are enabled by default to reduce denial-of-service risk from malformed or huge input files.
+
+Runtime safety limits (override only when needed):
+
+- `PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES` default: `16777216` (16 MiB)
+- `PRIMER_SCOUT_MAX_PRIMER_LINE_BYTES` default: `32768` (32 KiB)
+- `PRIMER_SCOUT_MAX_FASTA_LINE_BYTES` default: `8388608` (8 MiB)
+- `PRIMER_SCOUT_MAX_CONTIG_BASES` default: `250000000` (250M bases per contig)
+
+Example override:
+
+```bash
+PRIMER_SCOUT_MAX_CONTIG_BASES=350000000 primer-scout --primers panel.tsv --reference hg38.fa --summary
+```
+
 ## Upgrade and Uninstall
 
 Upgrade to latest:

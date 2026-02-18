@@ -3,9 +3,12 @@ use clap::Parser;
 use serde::Serialize;
 use std::ffi::OsString;
 use std::io::{self, BufWriter, Write};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use crate::{PrimerSummary, ScanOptions, load_primers, scan_references};
+
+const MAX_THREAD_MULTIPLIER: usize = 4;
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
@@ -30,8 +33,12 @@ fn execute(cli: Cli) -> Result<()> {
         scan_reverse_complement: !cli.no_revcomp,
     };
 
+    let max_threads = available_threads()
+        .saturating_mul(MAX_THREAD_MULTIPLIER)
+        .max(1);
+    let threads = cli.threads.max(1).min(max_threads);
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(cli.threads.max(1))
+        .num_threads(threads)
         .build()
         .context("failed to create rayon thread pool")?;
 
@@ -88,8 +95,12 @@ struct Cli {
 }
 
 fn default_threads() -> usize {
+    available_threads()
+}
+
+fn available_threads() -> usize {
     std::thread::available_parallelism()
-        .map(std::num::NonZeroUsize::get)
+        .map(NonZeroUsize::get)
         .unwrap_or(1)
 }
 
