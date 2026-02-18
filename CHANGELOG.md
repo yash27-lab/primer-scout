@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 Added:
 - `primer` launcher command with terminal DNA startup animation
 - shared CLI core reused by both `primer` and `primer-scout` binaries
+- startup update banner when a newer GitHub release is available
 
 ## [0.1.0] - 2026-02-18
 

@@ -91,6 +91,20 @@ Installed commands:
 - `primer` (DNA startup animation + CLI entrypoint)
 - `primer-scout` (direct scanner command)
 
+If `primer: command not found` appears:
+
+```bash
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bash_profile
+source ~/.bash_profile
+```
+
+For zsh:
+
+```bash
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
 ### Windows (PowerShell)
 
 ```powershell
@@ -145,6 +159,8 @@ DNA startup animation (no args):
 ```bash
 primer
 ```
+
+Startup checks latest GitHub release and shows an update banner when a newer version is available.
 
 Direct help:
 

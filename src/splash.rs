@@ -6,10 +6,14 @@ const ESC: &str = "\x1b[";
 const RESET: &str = "\x1b[0m";
 const CYAN: &str = "\x1b[36m";
 const BLUE: &str = "\x1b[94m";
+const YELLOW: &str = "\x1b[93m";
 const DIM: &str = "\x1b[2m";
 const BOLD: &str = "\x1b[1m";
 
-pub fn show_dna_splash(command_name: &str) -> io::Result<()> {
+pub fn show_dna_splash(
+    command_name: &str,
+    update_info: Option<&crate::update::UpdateInfo>,
+) -> io::Result<()> {
     if !io::stdout().is_terminal() {
         return Ok(());
     }
@@ -20,12 +24,12 @@ pub fn show_dna_splash(command_name: &str) -> io::Result<()> {
 
     let total_frames = 18usize;
     for phase in 0..total_frames {
-        render_frame(&mut out, phase, command_name, false)?;
+        render_frame(&mut out, phase, command_name, false, update_info)?;
         out.flush()?;
         thread::sleep(Duration::from_millis(55));
     }
 
-    render_frame(&mut out, total_frames, command_name, true)?;
+    render_frame(&mut out, total_frames, command_name, true, update_info)?;
     out.flush()?;
     Ok(())
 }
@@ -35,6 +39,7 @@ fn render_frame<W: Write>(
     phase: usize,
     command_name: &str,
     final_frame: bool,
+    update_info: Option<&crate::update::UpdateInfo>,
 ) -> io::Result<()> {
     write!(out, "{ESC}2J{ESC}H")?;
     writeln!(
@@ -65,6 +70,14 @@ fn render_frame<W: Write>(
             out,
             "{DIM}Tip: `{command_name} --help` for full command options.{RESET}"
         )?;
+        if let Some(update) = update_info {
+            writeln!(
+                out,
+                "{YELLOW}{BOLD}Update available!{RESET} {YELLOW}v{}{RESET}",
+                update.latest_version
+            )?;
+            writeln!(out, "{YELLOW}Run: {}{RESET}", update.install_command)?;
+        }
     } else {
         let dots = ".".repeat((phase % 4) + 1);
         writeln!(out, "{DIM}Initializing helix renderer{dots}{RESET}")?;

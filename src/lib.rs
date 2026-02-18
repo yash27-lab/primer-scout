@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 pub mod cli;
 pub mod splash;
+pub mod update;
 
 #[derive(Debug, Clone)]
 pub struct Primer {
