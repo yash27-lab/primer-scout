@@ -87,6 +87,10 @@ Expected smoke-test output:
 27
 ```
 
+Installed commands:
+- `primer` (DNA startup animation + CLI entrypoint)
+- `primer-scout` (direct scanner command)
+
 ### Windows (PowerShell)
 
 ```powershell
@@ -135,6 +139,18 @@ Reference input:
 - plain or `.gz`
 
 ## Quick Start
+
+DNA startup animation (no args):
+
+```bash
+primer
+```
+
+Direct help:
+
+```bash
+primer --help
+```
 
 Hit-level scan:
 

@@ -6,6 +6,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+pub mod cli;
+pub mod splash;
+
 #[derive(Debug, Clone)]
 pub struct Primer {
     pub name: String,

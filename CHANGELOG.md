@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+Added:
+- `primer` launcher command with terminal DNA startup animation
+- shared CLI core reused by both `primer` and `primer-scout` binaries
+
 ## [0.1.0] - 2026-02-18
 
 Initial public release.
