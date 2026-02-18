@@ -1,5 +1,7 @@
 # primer-scout
 
+![primer-scout social preview](assets/social-preview-v4.png)
+
 `primer-scout` is a high-speed Rust CLI for **primer off-target scanning** on FASTA references.
 
 It is built for teams that need:
