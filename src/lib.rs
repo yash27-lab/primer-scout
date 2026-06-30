@@ -206,12 +206,8 @@ pub fn scan_references(
         total_hits += file_result.total_hits;
         merged_hits.extend(file_result.hits);
 
-        for (acc, delta) in summary_acc.iter_mut().zip(file_result.summary) {
-            acc.total_hits += delta.total_hits;
-            acc.perfect_hits += delta.perfect_hits;
-            acc.forward_hits += delta.forward_hits;
-            acc.reverse_hits += delta.reverse_hits;
-            acc.contigs_with_hits += delta.contigs_with_hits;
+        for (acc, delta) in summary_acc.iter_mut().zip(&file_result.summary) {
+            acc.merge(delta);
         }
     }
 
@@ -343,12 +339,8 @@ fn scan_reference_file(
                     scan_contig(&file_name, &current_contig, &sequence, primers, options)?;
                 total_hits += contig_result.total_hits;
                 collected_hits.extend(contig_result.hits);
-                for (acc, delta) in summary_acc.iter_mut().zip(contig_result.summary) {
-                    acc.total_hits += delta.total_hits;
-                    acc.perfect_hits += delta.perfect_hits;
-                    acc.forward_hits += delta.forward_hits;
-                    acc.reverse_hits += delta.reverse_hits;
-                    acc.contigs_with_hits += delta.contigs_with_hits;
+                for (acc, delta) in summary_acc.iter_mut().zip(&contig_result.summary) {
+                    acc.merge(delta);
                 }
                 sequence.clear();
             }
@@ -377,12 +369,8 @@ fn scan_reference_file(
         let contig_result = scan_contig(&file_name, &current_contig, &sequence, primers, options)?;
         total_hits += contig_result.total_hits;
         collected_hits.extend(contig_result.hits);
-        for (acc, delta) in summary_acc.iter_mut().zip(contig_result.summary) {
-            acc.total_hits += delta.total_hits;
-            acc.perfect_hits += delta.perfect_hits;
-            acc.forward_hits += delta.forward_hits;
-            acc.reverse_hits += delta.reverse_hits;
-            acc.contigs_with_hits += delta.contigs_with_hits;
+        for (acc, delta) in summary_acc.iter_mut().zip(&contig_result.summary) {
+            acc.merge(delta);
         }
     }
 
@@ -571,6 +559,16 @@ struct SummaryAccumulator {
     forward_hits: u64,
     reverse_hits: u64,
     contigs_with_hits: u64,
+}
+
+impl SummaryAccumulator {
+    fn merge(&mut self, other: &SummaryAccumulator) {
+        self.total_hits += other.total_hits;
+        self.perfect_hits += other.perfect_hits;
+        self.forward_hits += other.forward_hits;
+        self.reverse_hits += other.reverse_hits;
+        self.contigs_with_hits += other.contigs_with_hits;
+    }
 }
 
 #[derive(Debug)]
