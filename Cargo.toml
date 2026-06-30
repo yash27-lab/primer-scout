@@ -25,6 +25,7 @@ ureq = { version = "2.12.1", features = ["json"] }
 
 [dev-dependencies]
 criterion = "0.7.0"
+flate2 = "1.1.9"
 
 [[bench]]
 name = "engine"
