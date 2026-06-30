@@ -206,7 +206,7 @@ pub fn scan_references(
         total_hits += file_result.total_hits;
         merged_hits.extend(file_result.hits);
 
-        for (acc, delta) in summary_acc.iter_mut().zip(file_result.summary.into_iter()) {
+        for (acc, delta) in summary_acc.iter_mut().zip(file_result.summary) {
             acc.total_hits += delta.total_hits;
             acc.perfect_hits += delta.perfect_hits;
             acc.forward_hits += delta.forward_hits;
@@ -343,10 +343,7 @@ fn scan_reference_file(
                     scan_contig(&file_name, &current_contig, &sequence, primers, options)?;
                 total_hits += contig_result.total_hits;
                 collected_hits.extend(contig_result.hits);
-                for (acc, delta) in summary_acc
-                    .iter_mut()
-                    .zip(contig_result.summary.into_iter())
-                {
+                for (acc, delta) in summary_acc.iter_mut().zip(contig_result.summary) {
                     acc.total_hits += delta.total_hits;
                     acc.perfect_hits += delta.perfect_hits;
                     acc.forward_hits += delta.forward_hits;
@@ -380,10 +377,7 @@ fn scan_reference_file(
         let contig_result = scan_contig(&file_name, &current_contig, &sequence, primers, options)?;
         total_hits += contig_result.total_hits;
         collected_hits.extend(contig_result.hits);
-        for (acc, delta) in summary_acc
-            .iter_mut()
-            .zip(contig_result.summary.into_iter())
-        {
+        for (acc, delta) in summary_acc.iter_mut().zip(contig_result.summary) {
             acc.total_hits += delta.total_hits;
             acc.perfect_hits += delta.perfect_hits;
             acc.forward_hits += delta.forward_hits;
@@ -857,5 +851,59 @@ mod tests {
         assert_eq!(parse_positive_usize("0"), None);
         assert_eq!(parse_positive_usize("-1"), None);
         assert_eq!(parse_positive_usize("abc"), None);
+    }
+
+    #[test]
+    fn iupac_ambiguous_primer_matches_multiple_bases() {
+        // Y matches C or T, so "TGYA" should hit both "TGCA" and "TGTA".
+        let primer = Primer::from_name_and_sequence("p", "TGYA").expect("build primer");
+        let result = scan_sequence(
+            "TGCATGTA",
+            "chr1",
+            std::slice::from_ref(&primer),
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: false,
+            },
+        )
+        .expect("scan");
+
+        assert_eq!(result.total_hits, 2);
+        let starts: Vec<usize> = result.hits.iter().map(|h| h.start).collect();
+        assert_eq!(starts, vec![0, 4]);
+        assert!(result.hits.iter().all(|h| h.mismatches == 0));
+    }
+
+    #[test]
+    fn no_revcomp_reports_only_forward_hits() {
+        // "GCAT" is the reverse complement of the primer "ATGC".
+        let primer = Primer::from_name_and_sequence("p", "ATGC").expect("build primer");
+        let reference = "ATGCAAAAGCAT";
+
+        let with_rc = scan_sequence(
+            reference,
+            "chr1",
+            std::slice::from_ref(&primer),
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: true,
+            },
+        )
+        .expect("scan with revcomp");
+        assert_eq!(with_rc.total_hits, 2);
+
+        let without_rc = scan_sequence(
+            reference,
+            "chr1",
+            std::slice::from_ref(&primer),
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: false,
+            },
+        )
+        .expect("scan without revcomp");
+        assert_eq!(without_rc.total_hits, 1);
+        assert_eq!(without_rc.hits[0].strand, '+');
+        assert_eq!(without_rc.summary[0].reverse_hits, 0);
     }
 }

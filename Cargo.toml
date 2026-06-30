@@ -2,10 +2,13 @@
 name = "primer-scout"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 default-run = "primer-scout"
 license = "MIT"
 description = "Fast Rust primer off-target scanner for FASTA references"
-repository = "https://github.com/your-username/primer-scout"
+repository = "https://github.com/yash27-lab/primer-scout"
+homepage = "https://github.com/yash27-lab/primer-scout"
+readme = "README.md"
 keywords = ["bioinformatics", "primers", "fasta", "pcr", "rust"]
 categories = ["science", "command-line-utilities"]
 
@@ -26,3 +29,9 @@ criterion = "0.7.0"
 [[bench]]
 name = "engine"
 harness = false
+
+# Optimized for the install-from-source path (`cargo install`), where the
+# scanner's hot loop benefits from cross-crate inlining.
+[profile.release]
+lto = "thin"
+codegen-units = 1

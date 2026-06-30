@@ -15,6 +15,24 @@ Added:
 - hardened console session storage (`0700`/`0600` perms on Unix, symlink rejection, sanitized session path override)
 - input safety guardrails for untrusted data (line-size/file-size/contig-size limits with env overrides)
 - thread cap hardening for user-provided `--threads`
+- `SECURITY.md` security policy with private vulnerability-reporting channel
+- `cargo audit` dependency-vulnerability scan as a CI job
+- declared MSRV (`rust-version = "1.88"`) and an LTO-enabled release profile
+- engine test coverage for IUPAC ambiguity matching and the `--no-revcomp` path
+
+Changed:
+- console resolves the scanner binary next to the current executable instead of
+  via `PATH`, avoiding binary-planting on platforms that search the working directory
+- expanded README with a clear problem statement, tool-comparison table, and
+  open-source rationale
+
+Fixed:
+- clippy `useless_conversion` errors that were failing CI under current stable
+- corrected the placeholder `repository` URL in `Cargo.toml`
+
+Security:
+- updated dependencies to clear `cargo audit` advisories (`rustls-webpki`
+  RUSTSEC-2026-0049/0098/0099/0104 and the `anyhow` RUSTSEC-2026-0190 unsoundness)
 
 ## [0.1.0] - 2026-02-18
 

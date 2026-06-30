@@ -32,13 +32,11 @@ Fast Rust CLI for primer off-target scanning on FASTA with mismatch and revcomp 
 
 ## GitHub CLI Commands
 
-Replace `your-username` with your account or org.
-
 ```bash
-gh repo edit your-username/primer-scout \
+gh repo edit yash27-lab/primer-scout \
   --description "Fast Rust CLI for primer off-target scanning on FASTA with mismatch and revcomp support."
 
-gh repo edit your-username/primer-scout \
+gh repo edit yash27-lab/primer-scout \
   --add-topic bioinformatics \
   --add-topic rust \
   --add-topic primer-design \

@@ -299,7 +299,7 @@ fn parse_direct_scan_args(message: &str) -> Option<Vec<String>> {
 }
 
 fn run_scan_with_args(args: Vec<String>, entries: &mut Vec<Entry>) {
-    match Command::new("primer-scout").args(&args).output() {
+    match scanner_command().args(&args).output() {
         Ok(output) => {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -324,6 +324,30 @@ fn run_scan_with_args(args: Vec<String>, entries: &mut Vec<Entry>) {
                     .to_string(),
             });
         }
+    }
+}
+
+fn scanner_command() -> Command {
+    // Prefer the `primer-scout` binary installed alongside this executable
+    // rather than resolving the bare name through `PATH`. On Windows, `PATH`
+    // resolution also searches the current working directory, which would let
+    // a planted `primer-scout` binary run instead of the intended one.
+    if let Ok(exe) = env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let sibling = dir.join(scanner_binary_name());
+        if sibling.is_file() {
+            return Command::new(sibling);
+        }
+    }
+    Command::new("primer-scout")
+}
+
+fn scanner_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "primer-scout.exe"
+    } else {
+        "primer-scout"
     }
 }
 
