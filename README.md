@@ -195,6 +195,30 @@ Expected smoke-test output:
 cargo install --path .
 ```
 
+### Prebuilt binaries (no Rust required)
+
+Tagged releases publish prebuilt binaries for Linux, macOS (Intel and Apple
+Silicon), and Windows, built automatically by the
+[release workflow](.github/workflows/release.yml) when a `v*` tag is pushed.
+
+When a build is available for your platform, grab it from the
+[Releases page](https://github.com/yash27-lab/primer-scout/releases):
+
+1. Download the archive for your platform:
+   - **Linux (x86_64):** `primer-scout-<version>-x86_64-unknown-linux-gnu.tar.gz`
+   - **macOS (Apple Silicon):** `primer-scout-<version>-aarch64-apple-darwin.tar.gz`
+   - **macOS (Intel):** `primer-scout-<version>-x86_64-apple-darwin.tar.gz`
+   - **Windows (x86_64):** `primer-scout-<version>-x86_64-pc-windows-msvc.zip`
+2. Extract it (`tar -xzf <archive>.tar.gz`, or unzip on Windows). Each archive
+   contains the `primer-scout` and `primer` binaries plus `LICENSE` and this README.
+3. Move `primer-scout` (and optionally `primer`) onto your `PATH`, e.g.
+   `sudo mv primer-scout /usr/local/bin/`. On macOS, clear the quarantine flag the
+   first time with `xattr -d com.apple.quarantine primer-scout`.
+4. Verify with `primer-scout --version`.
+
+If the Releases page doesn't list a binary for your platform yet, install from
+source using one of the methods above.
+
 ## Quick start
 
 Open the interactive console:
@@ -455,6 +479,7 @@ cargo audit   # dependency vulnerability scan (install with `cargo install cargo
 
 ## Project ops
 
+- Architecture & algorithm notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Contributing guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - Security policy: [`SECURITY.md`](SECURITY.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)

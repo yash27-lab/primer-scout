@@ -19,12 +19,20 @@ Added:
 - `cargo audit` dependency-vulnerability scan as a CI job
 - declared MSRV (`rust-version = "1.88"`) and an LTO-enabled release profile
 - engine test coverage for IUPAC ambiguity matching and the `--no-revcomp` path
+- prebuilt cross-platform release binaries (Linux, macOS Intel/Apple Silicon,
+  Windows) published automatically on `v*` tags via a release workflow
+- `docs/ARCHITECTURE.md` documenting the matching engine, parallelism, output
+  contracts, and safety model
+- black-box CLI integration test suite (`tests/cli.rs`) covering count/summary/JSON
+  output, CSV and gzip inputs, `--no-revcomp`, and error/limit paths
 
 Changed:
 - console resolves the scanner binary next to the current executable instead of
   via `PATH`, avoiding binary-planting on platforms that search the working directory
-- expanded README with a clear problem statement, tool-comparison table, and
-  open-source rationale
+- expanded README with a clear problem statement, tool-comparison table,
+  open-source rationale, and prebuilt-binary install instructions
+- extracted `SummaryAccumulator::merge` to remove the duplicated summary
+  accumulation loops in the engine
 
 Fixed:
 - clippy `useless_conversion` errors that were failing CI under current stable
