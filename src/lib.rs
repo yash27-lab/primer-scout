@@ -299,6 +299,7 @@ pub fn scan_sequence(
         bail!("no primers supplied");
     }
     validate_primers(primers)?;
+    validate_identifier(contig_name, "contig")?;
     let max_contig_bases =
         read_limit_from_env("PRIMER_SCOUT_MAX_CONTIG_BASES", DEFAULT_MAX_CONTIG_BASES);
     if sequence.len() > max_contig_bases {
@@ -383,7 +384,7 @@ fn scan_reference_file(
                 }
                 sequence.clear();
             }
-            contig_name = Some(parse_contig_name(header));
+            contig_name = Some(parse_contig_name(header).with_context(|| format!("invalid FASTA header at line {} in '{}'", line_index, reference.display()))?);
         } else if !trimmed.is_empty() {
             if contig_name.is_none() {
                 bail!(
@@ -642,13 +643,10 @@ fn validate_primers(primers: &[Primer]) -> Result<()> {
     Ok(())
 }
 
-fn parse_contig_name(header: &str) -> String {
-    header
-        .split_whitespace()
-        .next()
-        .filter(|x| !x.is_empty())
-        .unwrap_or("unknown_contig")
-        .to_string()
+fn parse_contig_name(header: &str) -> Result<String> {
+    let name = header.split_whitespace().next().context("FASTA header must contain a contig identifier")?;
+    validate_identifier(name, "contig")?;
+    Ok(name.to_string())
 }
 
 fn open_reader(path: &Path) -> Result<Box<dyn BufRead + Send>> {
@@ -1055,5 +1053,14 @@ mod tests {
         assert_eq!(read_line_bounded(&mut input, &mut line, 8).unwrap(), 9);
         assert_eq!(line.len(), 9);
         assert_eq!(input.position(), 9);
+    }
+
+    #[test]
+    fn contig_identifiers_are_required_and_output_safe() {
+        assert!(fasta_text("> \nATGC\n").is_err());
+        assert!(parse_contig_name("chr\u{1b}1").is_err());
+        assert_eq!(parse_contig_name("chr1 description").unwrap(), "chr1");
+        let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        assert!(scan_sequence("ATGC", "chr\t1", &[primer], &ScanOptions::default()).is_err());
     }
 }
