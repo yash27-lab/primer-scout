@@ -406,3 +406,20 @@ fn tsv_header_is_rejected_for_json_and_scalar_count_output() {
         assert!(!output.status.success());
     }
 }
+
+#[test]
+fn closing_a_consumer_pipe_is_normal_termination() {
+    use std::process::Stdio;
+    let path = tmp_path("pipe.fa");
+    std::fs::write(&path, format!(">chr\n{}\n", "ATGC".repeat(5_000))).unwrap();
+    let mut child = Command::new(bin())
+        .args(["--primers", "data/demo_primers.tsv", "--reference", path.to_str().unwrap(), "--threads", "1"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn().unwrap();
+    drop(child.stdout.take());
+    let output = child.wait_with_output().unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(output.status.success(), "{}", stderr_string(&output));
+    assert!(stderr_string(&output).is_empty());
+}

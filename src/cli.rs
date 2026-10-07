@@ -55,15 +55,17 @@ fn execute(cli: Cli) -> Result<()> {
 
     let scan = pool.install(|| scan_references(&cli.references, &primers, &options))?;
 
-    if cli.count_only {
-        emit_count(scan.total_hits, cli.json)?;
+    let output = if cli.count_only {
+        emit_count(scan.total_hits, cli.json)
     } else if cli.summary {
-        emit_summary(&scan.summary, cli.json, cli.header)?;
+        emit_summary(&scan.summary, cli.json, cli.header)
     } else {
-        emit_hits(&scan.hits, cli.json, cli.header)?;
+        emit_hits(&scan.hits, cli.json, cli.header)
+    };
+    match output {
+        Err(error) if error.downcast_ref::<io::Error>().is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe) => Ok(()),
+        other => other,
     }
-
-    Ok(())
 }
 
 #[derive(Debug, Parser)]
