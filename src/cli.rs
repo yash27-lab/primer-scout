@@ -24,6 +24,17 @@ where
     execute(cli)
 }
 
+/// Parses and executes scanner arguments without exiting the caller's process.
+/// Clap help/version requests are returned as clap::Error inside anyhow::Error.
+pub fn try_run_from_args<I, T>(args: I) -> Result<()>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    let cli = Cli::try_parse_from(args)?;
+    execute(cli)
+}
+
 fn execute(cli: Cli) -> Result<()> {
     let primers = load_primers(&cli.primers)
         .with_context(|| format!("failed loading primers from '{}'", cli.primers.display()))?;
@@ -176,4 +187,17 @@ fn emit_count(total: u64, as_json: bool) -> Result<()> {
     }
     out.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedding_api_returns_parse_errors_and_help_without_exiting() {
+        let error = try_run_from_args(["primer-scout", "--unknown"]).unwrap_err();
+        assert!(error.downcast_ref::<clap::Error>().is_some());
+        let help = try_run_from_args(["primer-scout", "--help"]).unwrap_err();
+        assert_eq!(help.downcast_ref::<clap::Error>().unwrap().kind(), clap::error::ErrorKind::DisplayHelp);
+    }
 }
