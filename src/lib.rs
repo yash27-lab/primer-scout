@@ -190,8 +190,8 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         } else {
             &line
         };
-        let trimmed = raw.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        let trimmed = raw.trim_end_matches(['\n', '\r']).trim_matches(' ');
+        if trimmed.trim().is_empty() || trimmed.trim_start().starts_with('#') {
             continue;
         }
 
@@ -1090,7 +1090,9 @@ mod tests {
     #[test]
     fn extra_panel_columns_are_not_silently_ignored() {
         assert!(panel_text("p\tATGC\tmetadata\n").is_err());
+        assert!(panel_text("p\tATGC\t\n").is_err());
         assert!(panel_text("p,ATGC,metadata\n").is_err());
+        assert_eq!(panel_text("\tATGC\n").unwrap()[0].name, "primer_0001");
         assert_eq!(panel_text("ATGC\n").unwrap()[0].name, "primer_0001");
     }
 
