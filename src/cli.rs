@@ -82,7 +82,7 @@ struct Cli {
     json: bool,
 
     /// Output per-primer summary rows.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "count_only")]
     summary: bool,
 
     /// Output only total number of hits.

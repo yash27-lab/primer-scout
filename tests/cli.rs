@@ -357,3 +357,14 @@ fn fasta_line_limit_is_enforced_on_read() {
     assert!(!output.status.success());
     assert!(stderr_string(&output).contains("FASTA line"));
 }
+
+#[test]
+fn conflicting_output_modes_are_rejected() {
+    let output = run(&[
+        "--primers", "data/demo_primers.tsv", "--reference", "data/demo.fa",
+        "--summary", "--count-only",
+    ]);
+    assert!(!output.status.success());
+    assert!(stdout_string(&output).is_empty());
+    assert!(stderr_string(&output).contains("cannot be used with"));
+}
