@@ -172,7 +172,8 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
             );
         }
 
-        let trimmed = line.trim();
+        let raw = if line_index == 1 { line.strip_prefix('\u{feff}').unwrap_or(&line) } else { &line };
+        let trimmed = raw.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
@@ -341,6 +342,7 @@ fn scan_reference_file(
     let mut reader = open_reader(reference)?;
     let file_name = reference.display().to_string();
     let mut line = String::new();
+    let mut line_index = 0usize;
     let mut contig_name: Option<String> = None;
     let mut sequence = String::new();
     let mut collected_hits = Vec::new();
@@ -361,6 +363,7 @@ fn scan_reference_file(
         if read_bytes == 0 {
             break;
         }
+        line_index += 1;
         if read_bytes > max_fasta_line_bytes {
             bail!(
                 "FASTA line in '{}' exceeds safety limit of {} bytes (override with PRIMER_SCOUT_MAX_FASTA_LINE_BYTES)",
@@ -369,7 +372,8 @@ fn scan_reference_file(
             );
         }
 
-        let trimmed = line.trim_end_matches(['\n', '\r']).trim();
+        let raw = if line_index == 1 { line.strip_prefix('\u{feff}').unwrap_or(&line) } else { &line };
+        let trimmed = raw.trim_end_matches(['\n', '\r']).trim();
         if let Some(header) = trimmed.strip_prefix('>') {
             if let Some(current_contig) = contig_name.take() {
                 let contig_result =
@@ -1021,5 +1025,24 @@ mod tests {
     fn panel_errors_use_physical_line_numbers() {
         let error = panel_text("# comment\n\nname\tsequence\np\tAXGC\n").unwrap_err();
         assert!(error.to_string().contains("line 4"));
+    }
+
+    fn fasta_text(text: &str) -> Result<ScanResult> {
+        let file = tmp_path("validation-reference.fa");
+        std::fs::write(&file, text)?;
+        let primer = Primer::from_name_and_sequence("p", "ATGC")?;
+        let result = scan_references(&[file.clone()], &[primer], &ScanOptions {
+            max_mismatches: 0,
+            scan_reverse_complement: false,
+        });
+        std::fs::remove_file(file)?;
+        result
+    }
+
+    #[test]
+    fn bom_prefixed_primer_and_fasta_files_are_accepted() {
+        let primers = panel_text("\u{feff}name\tsequence\np\tATGC\n").unwrap();
+        assert_eq!(primers[0].sequence, "ATGC");
+        assert_eq!(fasta_text("\u{feff}>chr\nATGC\n").unwrap().total_hits, 1);
     }
 }
