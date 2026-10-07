@@ -49,13 +49,23 @@ impl Primer {
             && self.sequence.bytes().zip(&self.masks).all(|(base, &mask)| {
                 normalize_base(base) == base && iupac_mask(base) == Some(mask)
             })
-            && self.sequence.bytes().rev().zip(self.reverse_complement.bytes())
+            && self
+                .sequence
+                .bytes()
+                .rev()
+                .zip(self.reverse_complement.bytes())
                 .all(|(base, reverse)| complement_base(base) == Some(reverse))
-            && self.reverse_complement.bytes().zip(&self.reverse_masks)
+            && self
+                .reverse_complement
+                .bytes()
+                .zip(&self.reverse_masks)
                 .all(|(base, &mask)| iupac_mask(base) == Some(mask))
             && self.is_palindromic == (self.sequence == self.reverse_complement);
         if !consistent {
-            bail!("primer '{}' has inconsistent cached data; rebuild it with Primer::from_name_and_sequence", self.name);
+            bail!(
+                "primer '{}' has inconsistent cached data; rebuild it with Primer::from_name_and_sequence",
+                self.name
+            );
         }
         Ok(())
     }
@@ -149,8 +159,12 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
 
     loop {
         line.clear();
-        let read_bytes = read_line_bounded(reader.as_mut(), &mut line, max_line_bytes.min(max_file_bytes.saturating_sub(total_bytes)))
-            .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
+        let read_bytes = read_line_bounded(
+            reader.as_mut(),
+            &mut line,
+            max_line_bytes.min(max_file_bytes.saturating_sub(total_bytes)),
+        )
+        .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
         if read_bytes == 0 {
             break;
         }
@@ -171,7 +185,11 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
             );
         }
 
-        let raw = if line_index == 1 { line.strip_prefix('\u{feff}').unwrap_or(&line) } else { &line };
+        let raw = if line_index == 1 {
+            line.strip_prefix('\u{feff}').unwrap_or(&line)
+        } else {
+            &line
+        };
         let trimmed = raw.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
@@ -182,7 +200,11 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         let parts: Vec<&str> = trimmed.split(del).map(str::trim).collect();
         row_index += 1;
         if parts.len() > 2 {
-            bail!("expected one sequence column or two name/sequence columns at line {} in '{}'", line_index, path.display());
+            bail!(
+                "expected one sequence column or two name/sequence columns at line {} in '{}'",
+                line_index,
+                path.display()
+            );
         }
 
         let (name_raw, seq_raw) = if parts.len() >= 2 {
@@ -201,7 +223,12 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
             name_raw.to_string()
         };
         if !names.insert(name.clone()) {
-            bail!("duplicate primer name '{}' at line {} in '{}'", name, line_index, path.display());
+            bail!(
+                "duplicate primer name '{}' at line {} in '{}'",
+                name,
+                line_index,
+                path.display()
+            );
         }
         let primer = Primer::from_name_and_sequence(name, seq_raw).with_context(|| {
             format!(
@@ -372,7 +399,11 @@ fn scan_reference_file(
             );
         }
 
-        let raw = if line_index == 1 { line.strip_prefix('\u{feff}').unwrap_or(&line) } else { &line };
+        let raw = if line_index == 1 {
+            line.strip_prefix('\u{feff}').unwrap_or(&line)
+        } else {
+            &line
+        };
         let trimmed = raw.trim_end_matches(['\n', '\r']).trim();
         if let Some(header) = trimmed.strip_prefix('>') {
             saw_record = true;
@@ -386,7 +417,13 @@ fn scan_reference_file(
                 }
                 sequence.clear();
             }
-            contig_name = Some(parse_contig_name(header).with_context(|| format!("invalid FASTA header at line {} in '{}'", line_index, reference.display()))?);
+            contig_name = Some(parse_contig_name(header).with_context(|| {
+                format!(
+                    "invalid FASTA header at line {} in '{}'",
+                    line_index,
+                    reference.display()
+                )
+            })?);
         } else if !trimmed.is_empty() {
             if contig_name.is_none() {
                 bail!(
@@ -417,7 +454,10 @@ fn scan_reference_file(
     }
 
     if !saw_record {
-        bail!("reference '{}' contains no FASTA records", reference.display());
+        bail!(
+            "reference '{}' contains no FASTA records",
+            reference.display()
+        );
     }
     Ok(FileScanResult {
         hits: collected_hits,
@@ -434,7 +474,11 @@ fn scan_contig(
     options: &ScanOptions,
 ) -> Result<ContigScanResult> {
     if !sequence.is_ascii() || sequence.bytes().any(|base| base.is_ascii_control()) {
-        bail!("reference contig '{}' in '{}' contains non-ASCII or control characters", contig_name, file_name);
+        bail!(
+            "reference contig '{}' in '{}' contains non-ASCII or control characters",
+            contig_name,
+            file_name
+        );
     }
     let sequence_bytes: Vec<u8> = sequence.bytes().map(normalize_base).collect();
     let sequence_masks: Vec<u8> = sequence_bytes
@@ -652,7 +696,10 @@ fn validate_primers(primers: &[Primer]) -> Result<()> {
 }
 
 fn parse_contig_name(header: &str) -> Result<String> {
-    let name = header.split_whitespace().next().context("FASTA header must contain a contig identifier")?;
+    let name = header
+        .split_whitespace()
+        .next()
+        .context("FASTA header must contain a contig identifier")?;
     validate_identifier(name, "contig")?;
     Ok(name.to_string())
 }
@@ -661,7 +708,10 @@ fn open_reader(path: &Path) -> Result<Box<dyn BufRead + Send>> {
     let file =
         File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
     let mut reader = BufReader::new(file);
-    let gzip_magic = reader.fill_buf().with_context(|| format!("failed reading input '{}'", path.display()))?.starts_with(&[0x1f, 0x8b]);
+    let gzip_magic = reader
+        .fill_buf()
+        .with_context(|| format!("failed reading input '{}'", path.display()))?
+        .starts_with(&[0x1f, 0x8b]);
     let is_gz = path
         .extension()
         .and_then(|x| x.to_str())
@@ -675,7 +725,11 @@ fn open_reader(path: &Path) -> Result<Box<dyn BufRead + Send>> {
     }
 }
 
-fn read_line_bounded(reader: &mut dyn BufRead, line: &mut String, limit: usize) -> std::io::Result<usize> {
+fn read_line_bounded(
+    reader: &mut dyn BufRead,
+    line: &mut String,
+    limit: usize,
+) -> std::io::Result<usize> {
     reader.take(limit.saturating_add(1) as u64).read_line(line)
 }
 
@@ -985,7 +1039,12 @@ mod tests {
         for sequence in ["Ł", "Ń", "Ŕ", "AŁGC"] {
             assert!(Primer::from_name_and_sequence("p", sequence).is_err());
         }
-        assert_eq!(Primer::from_name_and_sequence("p", " au gc ").unwrap().sequence, "ATGC");
+        assert_eq!(
+            Primer::from_name_and_sequence("p", " au gc ")
+                .unwrap()
+                .sequence,
+            "ATGC"
+        );
     }
 
     #[test]
@@ -1041,10 +1100,14 @@ mod tests {
         let file = tmp_path("validation-reference.fa");
         std::fs::write(&file, text)?;
         let primer = Primer::from_name_and_sequence("p", "ATGC")?;
-        let result = scan_references(&[file.clone()], &[primer], &ScanOptions {
-            max_mismatches: 0,
-            scan_reverse_complement: false,
-        });
+        let result = scan_references(
+            std::slice::from_ref(&file),
+            &[primer],
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: false,
+            },
+        );
         std::fs::remove_file(file)?;
         result
     }
@@ -1084,11 +1147,19 @@ mod tests {
     #[test]
     fn reference_unicode_and_controls_are_rejected_without_changing_ascii_ambiguity() {
         let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
-        let options = ScanOptions { max_mismatches: 0, scan_reverse_complement: false };
+        let options = ScanOptions {
+            max_mismatches: 0,
+            scan_reverse_complement: false,
+        };
         for text in ["AŁGC", "AT\tGC"] {
             assert!(scan_sequence(text, "chr", std::slice::from_ref(&primer), &options).is_err());
         }
-        assert_eq!(scan_sequence("AT?C", "chr", &[primer], &options).unwrap().total_hits, 1);
+        assert_eq!(
+            scan_sequence("AT?C", "chr", &[primer], &options)
+                .unwrap()
+                .total_hits,
+            1
+        );
     }
 
     #[test]
@@ -1099,9 +1170,14 @@ mod tests {
         encoder.write_all(b">chr\nATGC\n").unwrap();
         encoder.finish().unwrap();
         let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
-        let result = scan_references(std::slice::from_ref(&file), &[primer], &ScanOptions {
-            max_mismatches: 0, scan_reverse_complement: false,
-        });
+        let result = scan_references(
+            std::slice::from_ref(&file),
+            &[primer],
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: false,
+            },
+        );
         std::fs::remove_file(file).unwrap();
         assert_eq!(result.unwrap().total_hits, 1);
     }

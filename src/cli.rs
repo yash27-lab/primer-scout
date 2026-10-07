@@ -63,7 +63,13 @@ fn execute(cli: Cli) -> Result<()> {
         emit_hits(&scan.hits, cli.json, cli.header)
     };
     match output {
-        Err(error) if error.downcast_ref::<io::Error>().is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe) => Ok(()),
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
         other => other,
     }
 }
@@ -112,8 +118,12 @@ struct Cli {
 }
 
 fn parse_threads(value: &str) -> std::result::Result<usize, String> {
-    let threads = value.parse::<usize>().map_err(|_| "threads must be a positive integer".to_string())?;
-    if threads == 0 { return Err("threads must be a positive integer".into()); }
+    let threads = value
+        .parse::<usize>()
+        .map_err(|_| "threads must be a positive integer".to_string())?;
+    if threads == 0 {
+        return Err("threads must be a positive integer".into());
+    }
     Ok(threads)
 }
 
@@ -129,7 +139,12 @@ fn available_threads() -> usize {
 
 fn emit_hits(hits: &[crate::Hit], as_json: bool, header: bool) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
-    if header { writeln!(out, "file\tcontig\tprimer\tprimer_len\tstart\tend\tstrand\tmismatches\tmatched")?; }
+    if header {
+        writeln!(
+            out,
+            "file\tcontig\tprimer\tprimer_len\tstart\tend\tstrand\tmismatches\tmatched"
+        )?;
+    }
     for hit in hits {
         if as_json {
             writeln!(out, "{}", serde_json::to_string(hit)?)?;
@@ -155,7 +170,12 @@ fn emit_hits(hits: &[crate::Hit], as_json: bool, header: bool) -> Result<()> {
 
 fn emit_summary(summary: &[PrimerSummary], as_json: bool, header: bool) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
-    if header { writeln!(out, "primer\tprimer_len\ttotal_hits\tperfect_hits\tforward_hits\treverse_hits\tcontigs_with_hits")?; }
+    if header {
+        writeln!(
+            out,
+            "primer\tprimer_len\ttotal_hits\tperfect_hits\tforward_hits\treverse_hits\tcontigs_with_hits"
+        )?;
+    }
     for row in summary {
         if as_json {
             writeln!(out, "{}", serde_json::to_string(row)?)?;
@@ -206,6 +226,9 @@ mod tests {
         let error = try_run_from_args(["primer-scout", "--unknown"]).unwrap_err();
         assert!(error.downcast_ref::<clap::Error>().is_some());
         let help = try_run_from_args(["primer-scout", "--help"]).unwrap_err();
-        assert_eq!(help.downcast_ref::<clap::Error>().unwrap().kind(), clap::error::ErrorKind::DisplayHelp);
+        assert_eq!(
+            help.downcast_ref::<clap::Error>().unwrap().kind(),
+            clap::error::ErrorKind::DisplayHelp
+        );
     }
 }
