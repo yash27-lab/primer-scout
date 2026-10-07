@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 pub mod cli;
@@ -149,8 +149,7 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
 
     loop {
         line.clear();
-        let read_bytes = reader
-            .read_line(&mut line)
+        let read_bytes = read_line_bounded(reader.as_mut(), &mut line, max_line_bytes)
             .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
         if read_bytes == 0 {
             break;
@@ -669,6 +668,10 @@ fn open_reader(path: &Path) -> Result<Box<dyn BufRead + Send>> {
     }
 }
 
+fn read_line_bounded(reader: &mut dyn BufRead, line: &mut String, limit: usize) -> std::io::Result<usize> {
+    reader.take(limit.saturating_add(1) as u64).read_line(line)
+}
+
 fn infer_delimiter(line: &str) -> char {
     if line.contains('\t') { '\t' } else { ',' }
 }
@@ -1044,5 +1047,14 @@ mod tests {
         let primers = panel_text("\u{feff}name\tsequence\np\tATGC\n").unwrap();
         assert_eq!(primers[0].sequence, "ATGC");
         assert_eq!(fasta_text("\u{feff}>chr\nATGC\n").unwrap().total_hits, 1);
+    }
+
+    #[test]
+    fn bounded_line_read_stops_before_consuming_an_oversized_line() {
+        let mut input = std::io::Cursor::new(vec![b'A'; 1_000]);
+        let mut line = String::new();
+        assert_eq!(read_line_bounded(&mut input, &mut line, 8).unwrap(), 9);
+        assert_eq!(line.len(), 9);
+        assert_eq!(input.position(), 9);
     }
 }
