@@ -331,3 +331,145 @@ fn contig_base_limit_enforced() {
         "stderr should mention the contig base limit, got: {stderr}"
     );
 }
+
+#[test]
+fn total_primer_budget_stops_before_parsing_the_next_record() {
+    let path = tmp_path("file-budget.tsv");
+    std::fs::write(&path, "p1\tATGC\np2\tATGC\n").unwrap();
+    let output = Command::new(bin())
+        .args([
+            "--primers",
+            path.to_str().unwrap(),
+            "--reference",
+            "data/demo.fa",
+        ])
+        .env("PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES", "8")
+        .output()
+        .unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(!output.status.success());
+    assert!(stderr_string(&output).contains("exceeds safety limit of 8 bytes"));
+}
+
+#[test]
+fn fasta_line_limit_is_enforced_on_read() {
+    let path = tmp_path("line-budget.fa");
+    std::fs::write(&path, ">chr\nATGCATGCATGC\n").unwrap();
+    let output = Command::new(bin())
+        .args([
+            "--primers",
+            "data/demo_primers.tsv",
+            "--reference",
+            path.to_str().unwrap(),
+        ])
+        .env("PRIMER_SCOUT_MAX_FASTA_LINE_BYTES", "5")
+        .output()
+        .unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(!output.status.success());
+    assert!(stderr_string(&output).contains("FASTA line"));
+}
+
+#[test]
+fn conflicting_output_modes_are_rejected() {
+    let output = run(&[
+        "--primers",
+        "data/demo_primers.tsv",
+        "--reference",
+        "data/demo.fa",
+        "--summary",
+        "--count-only",
+    ]);
+    assert!(!output.status.success());
+    assert!(stdout_string(&output).is_empty());
+    assert!(stderr_string(&output).contains("cannot be used with"));
+}
+
+#[test]
+fn zero_threads_is_an_argument_error() {
+    let output = run(&[
+        "--primers",
+        "data/demo_primers.tsv",
+        "--reference",
+        "data/demo.fa",
+        "--threads",
+        "0",
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr_string(&output).contains("positive integer"));
+}
+
+#[test]
+fn tsv_headers_match_the_hit_and_summary_schemas() {
+    let hits = run(&[
+        "--primers",
+        "data/demo_primers.tsv",
+        "--reference",
+        "data/demo.fa",
+        "--header",
+        "--threads",
+        "1",
+    ]);
+    assert!(hits.status.success());
+    let text = stdout_string(&hits);
+    assert_eq!(
+        text.lines().next().unwrap(),
+        "file\tcontig\tprimer\tprimer_len\tstart\tend\tstrand\tmismatches\tmatched"
+    );
+    assert_eq!(text.lines().count(), 28);
+    let summary = run(&[
+        "--primers",
+        "data/demo_primers.tsv",
+        "--reference",
+        "data/demo.fa",
+        "--summary",
+        "--header",
+        "--threads",
+        "1",
+    ]);
+    assert!(summary.status.success());
+    assert_eq!(
+        stdout_string(&summary).lines().next().unwrap(),
+        "primer\tprimer_len\ttotal_hits\tperfect_hits\tforward_hits\treverse_hits\tcontigs_with_hits"
+    );
+}
+
+#[test]
+fn tsv_header_is_rejected_for_json_and_scalar_count_output() {
+    for mode in ["--json", "--count-only"] {
+        let output = run(&[
+            "--primers",
+            "data/demo_primers.tsv",
+            "--reference",
+            "data/demo.fa",
+            "--header",
+            mode,
+        ]);
+        assert!(!output.status.success());
+    }
+}
+
+#[test]
+fn closing_a_consumer_pipe_is_normal_termination() {
+    use std::process::Stdio;
+    let path = tmp_path("pipe.fa");
+    std::fs::write(&path, format!(">chr\n{}\n", "ATGC".repeat(5_000))).unwrap();
+    let mut child = Command::new(bin())
+        .args([
+            "--primers",
+            "data/demo_primers.tsv",
+            "--reference",
+            path.to_str().unwrap(),
+            "--threads",
+            "1",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    let output = child.wait_with_output().unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(output.status.success(), "{}", stderr_string(&output));
+    assert!(stderr_string(&output).is_empty());
+}

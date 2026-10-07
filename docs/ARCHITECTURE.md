@@ -60,7 +60,7 @@ Before masking, bases are normalised by `normalize_base`: `U`/`u` is folded to `
 (so RNA primers work) and everything else is upper-cased. Primer sequences are
 validated through `normalize_query` / `to_masks`, which reject any character that
 is not a known IUPAC code. Reference bases are different: `mask_or_unknown` maps an
-unknown reference byte to `N` (`0b1111`), i.e. it matches anything, rather than
+unknown printable ASCII reference symbol to `N` (`0b1111`), i.e. it matches anything, rather than
 failing the scan.
 
 A position **matches** when the query and reference masks share at least one set
@@ -125,14 +125,14 @@ parallel fan-out is across the panel, not across the genome.
 
 The direct CLI (`src/cli.rs`) builds a **bounded** rayon thread pool and runs the
 whole scan inside `pool.install(...)`. The requested `--threads` value (default:
-`std::thread::available_parallelism()`) is clamped to at least 1 and at most
+`std::thread::available_parallelism()`) must be positive and is capped at
 `available_parallelism() * MAX_THREAD_MULTIPLIER` (`MAX_THREAD_MULTIPLIER = 4`), so
 a user cannot accidentally spawn an unbounded number of OS threads.
 
 ## FASTA streaming
 
 References are read line by line (`scan_reference_file` in `src/lib.rs`) through a
-`BufRead` returned by `open_reader`. If the path ends in `.gz` (case-insensitive),
+`BufRead` returned by `open_reader`. If the stream begins with gzip magic bytes or the path ends in `.gz` (case-insensitive),
 the reader is wrapped in `flate2`'s `MultiGzDecoder`; otherwise the file is read as
 plain text. The decoder type is boxed (`Box<dyn BufRead + Send>`) so both paths
 share one code path.
@@ -140,8 +140,8 @@ share one code path.
 Parsing is classic FASTA accumulation: a line beginning with `>` opens a new
 contig (flushing and scanning the previous one), and subsequent non-empty lines are
 appended to the current contig buffer. Sequence bytes appearing before any header
-are a hard error. Contig names come from `parse_contig_name`, which takes the first
-whitespace-delimited token after `>` (falling back to `unknown_contig`). Each
+are a hard error. Contig names come from `parse_contig_name`, which requires the first
+whitespace-delimited token after `>` to be a nonempty, control-free identifier. Each
 contig is scanned as soon as its next header (or EOF) is reached, so the whole file
 is never held in memory at once — only one contig's sequence plus its mask vector.
 
@@ -246,3 +246,12 @@ Pointers for common changes:
 - **Benchmarks** — `benches/engine.rs` (Criterion micro) drives `scan_sequence`
   directly; `src/bin/gen_synthetic.rs` produces deterministic macro-benchmark
   inputs.
+
+## Input validation and API updates
+
+The [input migration notes](INPUT_MIGRATION.md) record strict panel/identifier
+validation and unchanged output fields. Public primer fields are checked once
+at the scan entry points against their cached masks, before contigs are scanned.
+Reference Unicode and control characters are rejected before byte coordinates
+are calculated. Parser reads cap line allocation and the remaining primer-file
+budget. TSV headers are opt-in; default rows remain headerless.

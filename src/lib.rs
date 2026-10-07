@@ -2,9 +2,10 @@ use anyhow::{Context, Result, bail};
 use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 pub mod cli;
@@ -36,7 +37,42 @@ impl Primer {
         self.sequence.is_empty()
     }
 
+    /// Revalidates public fields against the masks created by the constructor.
+    pub fn validate(&self) -> Result<()> {
+        validate_identifier(&self.name, "primer")?;
+        if self.is_empty() {
+            bail!("primer '{}' has zero length", self.name);
+        }
+        let consistent = self.sequence.len() == self.masks.len()
+            && self.sequence.len() == self.reverse_complement.len()
+            && self.sequence.len() == self.reverse_masks.len()
+            && self.sequence.bytes().zip(&self.masks).all(|(base, &mask)| {
+                normalize_base(base) == base && iupac_mask(base) == Some(mask)
+            })
+            && self
+                .sequence
+                .bytes()
+                .rev()
+                .zip(self.reverse_complement.bytes())
+                .all(|(base, reverse)| complement_base(base) == Some(reverse))
+            && self
+                .reverse_complement
+                .bytes()
+                .zip(&self.reverse_masks)
+                .all(|(base, &mask)| iupac_mask(base) == Some(mask))
+            && self.is_palindromic == (self.sequence == self.reverse_complement);
+        if !consistent {
+            bail!(
+                "primer '{}' has inconsistent cached data; rebuild it with Primer::from_name_and_sequence",
+                self.name
+            );
+        }
+        Ok(())
+    }
+
     pub fn from_name_and_sequence(name: impl Into<String>, sequence: &str) -> Result<Self> {
+        let name = name.into();
+        validate_identifier(&name, "primer")?;
         let normalized = normalize_query(sequence)?;
         if normalized.is_empty() {
             bail!("primer sequence must not be empty");
@@ -47,7 +83,7 @@ impl Primer {
         let reverse_masks = to_masks(&reverse_complement)?;
 
         Ok(Self {
-            name: name.into(),
+            name,
             sequence: normalized.clone(),
             reverse_complement: reverse_complement.clone(),
             masks,
@@ -107,8 +143,10 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
     let mut reader = open_reader(path)?;
     let mut line = String::new();
     let mut primers = Vec::new();
+    let mut names = HashSet::new();
     let mut delimiter: Option<char> = None;
     let mut row_index = 0usize;
+    let mut line_index = 0usize;
     let max_file_bytes = read_limit_from_env(
         "PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES",
         DEFAULT_MAX_PRIMER_FILE_BYTES,
@@ -121,12 +159,16 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
 
     loop {
         line.clear();
-        let read_bytes = reader
-            .read_line(&mut line)
-            .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
+        let read_bytes = read_line_bounded(
+            reader.as_mut(),
+            &mut line,
+            max_line_bytes.min(max_file_bytes.saturating_sub(total_bytes)),
+        )
+        .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
         if read_bytes == 0 {
             break;
         }
+        line_index += 1;
         total_bytes = total_bytes.saturating_add(read_bytes);
         if total_bytes > max_file_bytes {
             bail!(
@@ -143,8 +185,13 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
             );
         }
 
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        let raw = if line_index == 1 {
+            line.strip_prefix('\u{feff}').unwrap_or(&line)
+        } else {
+            &line
+        };
+        let trimmed = raw.trim_end_matches(['\n', '\r']).trim_matches(' ');
+        if trimmed.trim().is_empty() || trimmed.trim_start().starts_with('#') {
             continue;
         }
 
@@ -152,6 +199,13 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         delimiter = Some(del);
         let parts: Vec<&str> = trimmed.split(del).map(str::trim).collect();
         row_index += 1;
+        if parts.len() > 2 {
+            bail!(
+                "expected one sequence column or two name/sequence columns at line {} in '{}'",
+                line_index,
+                path.display()
+            );
+        }
 
         let (name_raw, seq_raw) = if parts.len() >= 2 {
             (parts[0], parts[1])
@@ -168,10 +222,18 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         } else {
             name_raw.to_string()
         };
+        if !names.insert(name.clone()) {
+            bail!(
+                "duplicate primer name '{}' at line {} in '{}'",
+                name,
+                line_index,
+                path.display()
+            );
+        }
         let primer = Primer::from_name_and_sequence(name, seq_raw).with_context(|| {
             format!(
-                "invalid primer sequence at row {} in '{}'",
-                row_index,
+                "invalid primer sequence at line {} in '{}'",
+                line_index,
                 path.display()
             )
         })?;
@@ -197,6 +259,7 @@ pub fn scan_references(
         bail!("no primers supplied");
     }
 
+    validate_primers(primers)?;
     let mut merged_hits = Vec::new();
     let mut summary_acc = vec![SummaryAccumulator::default(); primers.len()];
     let mut total_hits = 0u64;
@@ -262,6 +325,8 @@ pub fn scan_sequence(
     if primers.is_empty() {
         bail!("no primers supplied");
     }
+    validate_primers(primers)?;
+    validate_identifier(contig_name, "contig")?;
     let max_contig_bases =
         read_limit_from_env("PRIMER_SCOUT_MAX_CONTIG_BASES", DEFAULT_MAX_CONTIG_BASES);
     if sequence.len() > max_contig_bases {
@@ -304,7 +369,9 @@ fn scan_reference_file(
     let mut reader = open_reader(reference)?;
     let file_name = reference.display().to_string();
     let mut line = String::new();
+    let mut line_index = 0usize;
     let mut contig_name: Option<String> = None;
+    let mut saw_record = false;
     let mut sequence = String::new();
     let mut collected_hits = Vec::new();
     let mut summary_acc = vec![SummaryAccumulator::default(); primers.len()];
@@ -318,12 +385,12 @@ fn scan_reference_file(
 
     loop {
         line.clear();
-        let read_bytes = reader
-            .read_line(&mut line)
+        let read_bytes = read_line_bounded(reader.as_mut(), &mut line, max_fasta_line_bytes)
             .with_context(|| format!("failed reading reference '{}'", reference.display()))?;
         if read_bytes == 0 {
             break;
         }
+        line_index += 1;
         if read_bytes > max_fasta_line_bytes {
             bail!(
                 "FASTA line in '{}' exceeds safety limit of {} bytes (override with PRIMER_SCOUT_MAX_FASTA_LINE_BYTES)",
@@ -332,8 +399,14 @@ fn scan_reference_file(
             );
         }
 
-        let trimmed = line.trim_end_matches(['\n', '\r']).trim();
+        let raw = if line_index == 1 {
+            line.strip_prefix('\u{feff}').unwrap_or(&line)
+        } else {
+            &line
+        };
+        let trimmed = raw.trim_end_matches(['\n', '\r']).trim();
         if let Some(header) = trimmed.strip_prefix('>') {
+            saw_record = true;
             if let Some(current_contig) = contig_name.take() {
                 let contig_result =
                     scan_contig(&file_name, &current_contig, &sequence, primers, options)?;
@@ -344,7 +417,13 @@ fn scan_reference_file(
                 }
                 sequence.clear();
             }
-            contig_name = Some(parse_contig_name(header));
+            contig_name = Some(parse_contig_name(header).with_context(|| {
+                format!(
+                    "invalid FASTA header at line {} in '{}'",
+                    line_index,
+                    reference.display()
+                )
+            })?);
         } else if !trimmed.is_empty() {
             if contig_name.is_none() {
                 bail!(
@@ -374,6 +453,12 @@ fn scan_reference_file(
         }
     }
 
+    if !saw_record {
+        bail!(
+            "reference '{}' contains no FASTA records",
+            reference.display()
+        );
+    }
     Ok(FileScanResult {
         hits: collected_hits,
         summary: summary_acc,
@@ -388,6 +473,13 @@ fn scan_contig(
     primers: &[Primer],
     options: &ScanOptions,
 ) -> Result<ContigScanResult> {
+    if !sequence.is_ascii() || sequence.bytes().any(|base| base.is_ascii_control()) {
+        bail!(
+            "reference contig '{}' in '{}' contains non-ASCII or control characters",
+            contig_name,
+            file_name
+        );
+    }
     let sequence_bytes: Vec<u8> = sequence.bytes().map(normalize_base).collect();
     let sequence_masks: Vec<u8> = sequence_bytes
         .iter()
@@ -592,29 +684,53 @@ struct PerPrimerContigResult {
     summary: SummaryAccumulator,
 }
 
-fn parse_contig_name(header: &str) -> String {
-    header
+fn validate_primers(primers: &[Primer]) -> Result<()> {
+    let mut names = HashSet::new();
+    for primer in primers {
+        primer.validate()?;
+        if !names.insert(primer.name.as_str()) {
+            bail!("duplicate primer name '{}'", primer.name);
+        }
+    }
+    Ok(())
+}
+
+fn parse_contig_name(header: &str) -> Result<String> {
+    let name = header
         .split_whitespace()
         .next()
-        .filter(|x| !x.is_empty())
-        .unwrap_or("unknown_contig")
-        .to_string()
+        .context("FASTA header must contain a contig identifier")?;
+    validate_identifier(name, "contig")?;
+    Ok(name.to_string())
 }
 
 fn open_reader(path: &Path) -> Result<Box<dyn BufRead + Send>> {
     let file =
         File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
+    let mut reader = BufReader::new(file);
+    let gzip_magic = reader
+        .fill_buf()
+        .with_context(|| format!("failed reading input '{}'", path.display()))?
+        .starts_with(&[0x1f, 0x8b]);
     let is_gz = path
         .extension()
         .and_then(|x| x.to_str())
         .map(|ext| ext.eq_ignore_ascii_case("gz"))
         .unwrap_or(false);
 
-    if is_gz {
-        Ok(Box::new(BufReader::new(MultiGzDecoder::new(file))))
+    if is_gz || gzip_magic {
+        Ok(Box::new(BufReader::new(MultiGzDecoder::new(reader))))
     } else {
-        Ok(Box::new(BufReader::new(file)))
+        Ok(Box::new(reader))
     }
+}
+
+fn read_line_bounded(
+    reader: &mut dyn BufRead,
+    line: &mut String,
+    limit: usize,
+) -> std::io::Result<usize> {
+    reader.take(limit.saturating_add(1) as u64).read_line(line)
 }
 
 fn infer_delimiter(line: &str) -> char {
@@ -644,11 +760,24 @@ fn is_header(name: &str, sequence: &str) -> bool {
         && (right == "sequence" || right == "primer" || right == "seq")
 }
 
+fn validate_identifier(name: &str, kind: &str) -> Result<()> {
+    if name.trim().is_empty() {
+        bail!("{kind} name must not be empty");
+    }
+    if name.chars().any(char::is_control) {
+        bail!("{kind} name must not contain control characters");
+    }
+    Ok(())
+}
+
 fn normalize_query(raw: &str) -> Result<String> {
     let mut normalized = String::with_capacity(raw.len());
     for ch in raw.chars() {
         if ch.is_whitespace() {
             continue;
+        }
+        if !ch.is_ascii() {
+            bail!("unsupported non-ASCII base '{ch}' in primer sequence");
         }
         let c = normalize_base(ch as u8) as char;
         if iupac_mask(c as u8).is_none() {
@@ -739,12 +868,16 @@ mod tests {
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    static NEXT_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     fn tmp_path(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("primer_scout_{nanos}_{name}"))
+        let id = NEXT_FIXTURE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("primer_scout_{pid}_{nanos}_{id}_{name}"))
     }
 
     #[test]
@@ -903,5 +1036,155 @@ mod tests {
         assert_eq!(without_rc.total_hits, 1);
         assert_eq!(without_rc.hits[0].strand, '+');
         assert_eq!(without_rc.summary[0].reverse_hits, 0);
+    }
+
+    #[test]
+    fn non_ascii_primer_symbols_cannot_alias_ascii_bases() {
+        for sequence in ["Ł", "Ń", "Ŕ", "AŁGC"] {
+            assert!(Primer::from_name_and_sequence("p", sequence).is_err());
+        }
+        assert_eq!(
+            Primer::from_name_and_sequence("p", " au gc ")
+                .unwrap()
+                .sequence,
+            "ATGC"
+        );
+    }
+
+    #[test]
+    fn primer_names_reject_blank_and_control_characters() {
+        for name in ["", "  ", "p\t1", "p\n1", "p\u{1b}1"] {
+            assert!(Primer::from_name_and_sequence(name, "ATGC").is_err());
+        }
+        assert!(Primer::from_name_and_sequence("p α", "ATGC").is_ok());
+    }
+
+    #[test]
+    fn public_primer_mutations_are_rejected_before_scanning() {
+        let mut primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        primer.sequence = "AT".into();
+        assert!(scan_sequence("ATG", "chr", &[primer], &ScanOptions::default()).is_err());
+        let mut primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        primer.reverse_complement = "AAAA".into();
+        assert!(scan_sequence("ATGC", "chr", &[primer], &ScanOptions::default()).is_err());
+    }
+
+    fn panel_text(text: &str) -> Result<Vec<Primer>> {
+        let file = tmp_path("validation-panel.tsv");
+        std::fs::write(&file, text)?;
+        let result = load_primers(&file);
+        std::fs::remove_file(file)?;
+        result
+    }
+
+    #[test]
+    fn duplicate_panel_and_library_names_are_rejected() {
+        assert!(panel_text("name\tsequence\np\tATGC\np\tAAAA\n").is_err());
+        let primers = vec![
+            Primer::from_name_and_sequence("p", "ATGC").unwrap(),
+            Primer::from_name_and_sequence("p", "AAAA").unwrap(),
+        ];
+        assert!(scan_sequence("ATGCAAAA", "chr", &primers, &ScanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn extra_panel_columns_are_not_silently_ignored() {
+        assert!(panel_text("p\tATGC\tmetadata\n").is_err());
+        assert!(panel_text("p\tATGC\t\n").is_err());
+        assert!(panel_text("p,ATGC,metadata\n").is_err());
+        assert_eq!(panel_text("\tATGC\n").unwrap()[0].name, "primer_0001");
+        assert_eq!(panel_text("ATGC\n").unwrap()[0].name, "primer_0001");
+    }
+
+    #[test]
+    fn panel_errors_use_physical_line_numbers() {
+        let error = panel_text("# comment\n\nname\tsequence\np\tAXGC\n").unwrap_err();
+        assert!(error.to_string().contains("line 4"));
+    }
+
+    fn fasta_text(text: &str) -> Result<ScanResult> {
+        let file = tmp_path("validation-reference.fa");
+        std::fs::write(&file, text)?;
+        let primer = Primer::from_name_and_sequence("p", "ATGC")?;
+        let result = scan_references(
+            std::slice::from_ref(&file),
+            &[primer],
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: false,
+            },
+        );
+        std::fs::remove_file(file)?;
+        result
+    }
+
+    #[test]
+    fn bom_prefixed_primer_and_fasta_files_are_accepted() {
+        let primers = panel_text("\u{feff}name\tsequence\np\tATGC\n").unwrap();
+        assert_eq!(primers[0].sequence, "ATGC");
+        assert_eq!(fasta_text("\u{feff}>chr\nATGC\n").unwrap().total_hits, 1);
+    }
+
+    #[test]
+    fn bounded_line_read_stops_before_consuming_an_oversized_line() {
+        let mut input = std::io::Cursor::new(vec![b'A'; 1_000]);
+        let mut line = String::new();
+        assert_eq!(read_line_bounded(&mut input, &mut line, 8).unwrap(), 9);
+        assert_eq!(line.len(), 9);
+        assert_eq!(input.position(), 9);
+    }
+
+    #[test]
+    fn contig_identifiers_are_required_and_output_safe() {
+        assert!(fasta_text("> \nATGC\n").is_err());
+        assert!(parse_contig_name("chr\u{1b}1").is_err());
+        assert_eq!(parse_contig_name("chr1 description").unwrap(), "chr1");
+        let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        assert!(scan_sequence("ATGC", "chr\t1", &[primer], &ScanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn empty_fasta_files_are_distinct_from_named_empty_contigs() {
+        assert!(fasta_text("").is_err());
+        assert!(fasta_text("\n \n").is_err());
+        assert_eq!(fasta_text(">chr1\n").unwrap().total_hits, 0);
+    }
+
+    #[test]
+    fn reference_unicode_and_controls_are_rejected_without_changing_ascii_ambiguity() {
+        let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        let options = ScanOptions {
+            max_mismatches: 0,
+            scan_reverse_complement: false,
+        };
+        for text in ["AŁGC", "AT\tGC"] {
+            assert!(scan_sequence(text, "chr", std::slice::from_ref(&primer), &options).is_err());
+        }
+        assert_eq!(
+            scan_sequence("AT?C", "chr", &[primer], &options)
+                .unwrap()
+                .total_hits,
+            1
+        );
+    }
+
+    #[test]
+    fn gzip_content_is_detected_without_a_gz_suffix() {
+        let file = tmp_path("compressed-reference.fa");
+        let handle = File::create(&file).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(handle, flate2::Compression::default());
+        encoder.write_all(b">chr\nATGC\n").unwrap();
+        encoder.finish().unwrap();
+        let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        let result = scan_references(
+            std::slice::from_ref(&file),
+            &[primer],
+            &ScanOptions {
+                max_mismatches: 0,
+                scan_reverse_complement: false,
+            },
+        );
+        std::fs::remove_file(file).unwrap();
+        assert_eq!(result.unwrap().total_hits, 1);
     }
 }

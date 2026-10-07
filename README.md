@@ -324,6 +324,11 @@ primer-scout \
 
 ## Command reference
 
+Use `--header` for self-describing TSV hit/summary output. See the
+[input migration notes](docs/INPUT_MIGRATION.md) for strict identifier/panel
+validation, bounded reads, gzip detection, and the non-exiting library API.
+
+
 ### `primer` (interactive)
 
 ```bash

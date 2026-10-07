@@ -24,6 +24,17 @@ where
     execute(cli)
 }
 
+/// Parses and executes scanner arguments without exiting the caller's process.
+/// Clap help/version requests are returned as clap::Error inside anyhow::Error.
+pub fn try_run_from_args<I, T>(args: I) -> Result<()>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    let cli = Cli::try_parse_from(args)?;
+    execute(cli)
+}
+
 fn execute(cli: Cli) -> Result<()> {
     let primers = load_primers(&cli.primers)
         .with_context(|| format!("failed loading primers from '{}'", cli.primers.display()))?;
@@ -44,15 +55,23 @@ fn execute(cli: Cli) -> Result<()> {
 
     let scan = pool.install(|| scan_references(&cli.references, &primers, &options))?;
 
-    if cli.count_only {
-        emit_count(scan.total_hits, cli.json)?;
+    let output = if cli.count_only {
+        emit_count(scan.total_hits, cli.json)
     } else if cli.summary {
-        emit_summary(&scan.summary, cli.json)?;
+        emit_summary(&scan.summary, cli.json, cli.header)
     } else {
-        emit_hits(&scan.hits, cli.json)?;
+        emit_hits(&scan.hits, cli.json, cli.header)
+    };
+    match output {
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
+        other => other,
     }
-
-    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -81,8 +100,12 @@ struct Cli {
     #[arg(long)]
     json: bool,
 
+    /// Include column headings in hit or summary TSV output.
+    #[arg(long, conflicts_with_all = ["json", "count_only"])]
+    header: bool,
+
     /// Output per-primer summary rows.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "count_only")]
     summary: bool,
 
     /// Output only total number of hits.
@@ -90,8 +113,18 @@ struct Cli {
     count_only: bool,
 
     /// Number of worker threads.
-    #[arg(long, default_value_t = default_threads())]
+    #[arg(long, default_value_t = default_threads(), value_parser = parse_threads)]
     threads: usize,
+}
+
+fn parse_threads(value: &str) -> std::result::Result<usize, String> {
+    let threads = value
+        .parse::<usize>()
+        .map_err(|_| "threads must be a positive integer".to_string())?;
+    if threads == 0 {
+        return Err("threads must be a positive integer".into());
+    }
+    Ok(threads)
 }
 
 fn default_threads() -> usize {
@@ -104,8 +137,14 @@ fn available_threads() -> usize {
         .unwrap_or(1)
 }
 
-fn emit_hits(hits: &[crate::Hit], as_json: bool) -> Result<()> {
+fn emit_hits(hits: &[crate::Hit], as_json: bool, header: bool) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
+    if header {
+        writeln!(
+            out,
+            "file\tcontig\tprimer\tprimer_len\tstart\tend\tstrand\tmismatches\tmatched"
+        )?;
+    }
     for hit in hits {
         if as_json {
             writeln!(out, "{}", serde_json::to_string(hit)?)?;
@@ -129,8 +168,14 @@ fn emit_hits(hits: &[crate::Hit], as_json: bool) -> Result<()> {
     Ok(())
 }
 
-fn emit_summary(summary: &[PrimerSummary], as_json: bool) -> Result<()> {
+fn emit_summary(summary: &[PrimerSummary], as_json: bool, header: bool) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
+    if header {
+        writeln!(
+            out,
+            "primer\tprimer_len\ttotal_hits\tperfect_hits\tforward_hits\treverse_hits\tcontigs_with_hits"
+        )?;
+    }
     for row in summary {
         if as_json {
             writeln!(out, "{}", serde_json::to_string(row)?)?;
@@ -170,4 +215,20 @@ fn emit_count(total: u64, as_json: bool) -> Result<()> {
     }
     out.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedding_api_returns_parse_errors_and_help_without_exiting() {
+        let error = try_run_from_args(["primer-scout", "--unknown"]).unwrap_err();
+        assert!(error.downcast_ref::<clap::Error>().is_some());
+        let help = try_run_from_args(["primer-scout", "--help"]).unwrap_err();
+        assert_eq!(
+            help.downcast_ref::<clap::Error>().unwrap().kind(),
+            clap::error::ErrorKind::DisplayHelp
+        );
+    }
 }

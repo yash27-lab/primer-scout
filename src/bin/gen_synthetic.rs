@@ -56,7 +56,7 @@ struct Args {
 }
 
 fn generate_sequence(len: usize, rng: &mut XorShift64) -> Vec<u8> {
-    const BASES: [u8; 4] = [b'A', b'C', b'G', b'T'];
+    const BASES: [u8; 4] = *b"ACGT";
     let mut out = Vec::with_capacity(len);
     for _ in 0..len {
         out.push(BASES[(rng.next_u32() as usize) & 3]);
@@ -122,7 +122,7 @@ fn write_primers(
 }
 
 fn mutate_base(current: u8, rng: &mut XorShift64) -> u8 {
-    const BASES: [u8; 4] = [b'A', b'C', b'G', b'T'];
+    const BASES: [u8; 4] = *b"ACGT";
     for _ in 0..10 {
         let candidate = BASES[(rng.next_u32() as usize) & 3];
         if candidate != current {

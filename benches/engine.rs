@@ -39,7 +39,7 @@ fn benchmark_engine(c: &mut Criterion) {
 }
 
 fn generate_sequence(len: usize, seed: u64) -> String {
-    const BASES: [u8; 4] = [b'A', b'C', b'G', b'T'];
+    const BASES: [u8; 4] = *b"ACGT";
     let mut rng = XorShift64::new(seed);
     let mut out = Vec::with_capacity(len);
     for _ in 0..len {
@@ -77,7 +77,7 @@ fn generate_primers_from_reference(
 }
 
 fn mutate_base(current: u8, rng: &mut XorShift64) -> u8 {
-    const BASES: [u8; 4] = [b'A', b'C', b'G', b'T'];
+    const BASES: [u8; 4] = *b"ACGT";
     for _ in 0..8 {
         let cand = BASES[(rng.next_u32() as usize) & 3];
         if cand != current {
