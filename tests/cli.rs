@@ -368,3 +368,12 @@ fn conflicting_output_modes_are_rejected() {
     assert!(stdout_string(&output).is_empty());
     assert!(stderr_string(&output).contains("cannot be used with"));
 }
+
+#[test]
+fn zero_threads_is_an_argument_error() {
+    let output = run(&[
+        "--primers", "data/demo_primers.tsv", "--reference", "data/demo.fa", "--threads", "0",
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr_string(&output).contains("positive integer"));
+}

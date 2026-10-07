@@ -90,8 +90,14 @@ struct Cli {
     count_only: bool,
 
     /// Number of worker threads.
-    #[arg(long, default_value_t = default_threads())]
+    #[arg(long, default_value_t = default_threads(), value_parser = parse_threads)]
     threads: usize,
+}
+
+fn parse_threads(value: &str) -> std::result::Result<usize, String> {
+    let threads = value.parse::<usize>().map_err(|_| "threads must be a positive integer".to_string())?;
+    if threads == 0 { return Err("threads must be a positive integer".into()); }
+    Ok(threads)
 }
 
 fn default_threads() -> usize {
