@@ -179,6 +179,9 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         delimiter = Some(del);
         let parts: Vec<&str> = trimmed.split(del).map(str::trim).collect();
         row_index += 1;
+        if parts.len() > 2 {
+            bail!("expected one sequence column or two name/sequence columns at row {} in '{}'", row_index, path.display());
+        }
 
         let (name_raw, seq_raw) = if parts.len() >= 2 {
             (parts[0], parts[1])
@@ -1003,5 +1006,12 @@ mod tests {
             Primer::from_name_and_sequence("p", "AAAA").unwrap(),
         ];
         assert!(scan_sequence("ATGCAAAA", "chr", &primers, &ScanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn extra_panel_columns_are_not_silently_ignored() {
+        assert!(panel_text("p\tATGC\tmetadata\n").is_err());
+        assert!(panel_text("p,ATGC,metadata\n").is_err());
+        assert_eq!(panel_text("ATGC\n").unwrap()[0].name, "primer_0001");
     }
 }
