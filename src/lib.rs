@@ -356,8 +356,7 @@ fn scan_reference_file(
 
     loop {
         line.clear();
-        let read_bytes = reader
-            .read_line(&mut line)
+        let read_bytes = read_line_bounded(reader.as_mut(), &mut line, max_fasta_line_bytes)
             .with_context(|| format!("failed reading reference '{}'", reference.display()))?;
         if read_bytes == 0 {
             break;

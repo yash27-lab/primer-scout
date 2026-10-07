@@ -344,3 +344,16 @@ fn total_primer_budget_stops_before_parsing_the_next_record() {
     assert!(!output.status.success());
     assert!(stderr_string(&output).contains("exceeds safety limit of 8 bytes"));
 }
+
+#[test]
+fn fasta_line_limit_is_enforced_on_read() {
+    let path = tmp_path("line-budget.fa");
+    std::fs::write(&path, ">chr\nATGCATGCATGC\n").unwrap();
+    let output = Command::new(bin())
+        .args(["--primers", "data/demo_primers.tsv", "--reference", path.to_str().unwrap()])
+        .env("PRIMER_SCOUT_MAX_FASTA_LINE_BYTES", "5")
+        .output().unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(!output.status.success());
+    assert!(stderr_string(&output).contains("FASTA line"));
+}
