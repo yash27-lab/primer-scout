@@ -344,6 +344,7 @@ fn scan_reference_file(
     let mut line = String::new();
     let mut line_index = 0usize;
     let mut contig_name: Option<String> = None;
+    let mut saw_record = false;
     let mut sequence = String::new();
     let mut collected_hits = Vec::new();
     let mut summary_acc = vec![SummaryAccumulator::default(); primers.len()];
@@ -374,6 +375,7 @@ fn scan_reference_file(
         let raw = if line_index == 1 { line.strip_prefix('\u{feff}').unwrap_or(&line) } else { &line };
         let trimmed = raw.trim_end_matches(['\n', '\r']).trim();
         if let Some(header) = trimmed.strip_prefix('>') {
+            saw_record = true;
             if let Some(current_contig) = contig_name.take() {
                 let contig_result =
                     scan_contig(&file_name, &current_contig, &sequence, primers, options)?;
@@ -414,6 +416,9 @@ fn scan_reference_file(
         }
     }
 
+    if !saw_record {
+        bail!("reference '{}' contains no FASTA records", reference.display());
+    }
     Ok(FileScanResult {
         hits: collected_hits,
         summary: summary_acc,
@@ -1062,5 +1067,12 @@ mod tests {
         assert_eq!(parse_contig_name("chr1 description").unwrap(), "chr1");
         let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
         assert!(scan_sequence("ATGC", "chr\t1", &[primer], &ScanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn empty_fasta_files_are_distinct_from_named_empty_contigs() {
+        assert!(fasta_text("").is_err());
+        assert!(fasta_text("\n \n").is_err());
+        assert_eq!(fasta_text(">chr1\n").unwrap().total_hits, 0);
     }
 }
