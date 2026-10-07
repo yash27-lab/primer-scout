@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -132,6 +133,7 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
     let mut reader = open_reader(path)?;
     let mut line = String::new();
     let mut primers = Vec::new();
+    let mut names = HashSet::new();
     let mut delimiter: Option<char> = None;
     let mut row_index = 0usize;
     let max_file_bytes = read_limit_from_env(
@@ -193,6 +195,9 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         } else {
             name_raw.to_string()
         };
+        if !names.insert(name.clone()) {
+            bail!("duplicate primer name '{}' at row {} in '{}'", name, row_index, path.display());
+        }
         let primer = Primer::from_name_and_sequence(name, seq_raw).with_context(|| {
             format!(
                 "invalid primer sequence at row {} in '{}'",
@@ -620,8 +625,12 @@ struct PerPrimerContigResult {
 }
 
 fn validate_primers(primers: &[Primer]) -> Result<()> {
+    let mut names = HashSet::new();
     for primer in primers {
         primer.validate()?;
+        if !names.insert(primer.name.as_str()) {
+            bail!("duplicate primer name '{}'", primer.name);
+        }
     }
     Ok(())
 }
@@ -976,5 +985,23 @@ mod tests {
         let mut primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
         primer.reverse_complement = "AAAA".into();
         assert!(scan_sequence("ATGC", "chr", &[primer], &ScanOptions::default()).is_err());
+    }
+
+    fn panel_text(text: &str) -> Result<Vec<Primer>> {
+        let file = tmp_path("validation-panel.tsv");
+        std::fs::write(&file, text)?;
+        let result = load_primers(&file);
+        std::fs::remove_file(file)?;
+        result
+    }
+
+    #[test]
+    fn duplicate_panel_and_library_names_are_rejected() {
+        assert!(panel_text("name\tsequence\np\tATGC\np\tAAAA\n").is_err());
+        let primers = vec![
+            Primer::from_name_and_sequence("p", "ATGC").unwrap(),
+            Primer::from_name_and_sequence("p", "AAAA").unwrap(),
+        ];
+        assert!(scan_sequence("ATGCAAAA", "chr", &primers, &ScanOptions::default()).is_err());
     }
 }
