@@ -36,6 +36,29 @@ impl Primer {
         self.sequence.is_empty()
     }
 
+    /// Revalidates public fields against the masks created by the constructor.
+    pub fn validate(&self) -> Result<()> {
+        validate_identifier(&self.name, "primer")?;
+        if self.is_empty() {
+            bail!("primer '{}' has zero length", self.name);
+        }
+        let consistent = self.sequence.len() == self.masks.len()
+            && self.sequence.len() == self.reverse_complement.len()
+            && self.sequence.len() == self.reverse_masks.len()
+            && self.sequence.bytes().zip(&self.masks).all(|(base, &mask)| {
+                normalize_base(base) == base && iupac_mask(base) == Some(mask)
+            })
+            && self.sequence.bytes().rev().zip(self.reverse_complement.bytes())
+                .all(|(base, reverse)| complement_base(base) == Some(reverse))
+            && self.reverse_complement.bytes().zip(&self.reverse_masks)
+                .all(|(base, &mask)| iupac_mask(base) == Some(mask))
+            && self.is_palindromic == (self.sequence == self.reverse_complement);
+        if !consistent {
+            bail!("primer '{}' has inconsistent cached data; rebuild it with Primer::from_name_and_sequence", self.name);
+        }
+        Ok(())
+    }
+
     pub fn from_name_and_sequence(name: impl Into<String>, sequence: &str) -> Result<Self> {
         let name = name.into();
         validate_identifier(&name, "primer")?;
@@ -199,6 +222,7 @@ pub fn scan_references(
         bail!("no primers supplied");
     }
 
+    validate_primers(primers)?;
     let mut merged_hits = Vec::new();
     let mut summary_acc = vec![SummaryAccumulator::default(); primers.len()];
     let mut total_hits = 0u64;
@@ -264,6 +288,7 @@ pub fn scan_sequence(
     if primers.is_empty() {
         bail!("no primers supplied");
     }
+    validate_primers(primers)?;
     let max_contig_bases =
         read_limit_from_env("PRIMER_SCOUT_MAX_CONTIG_BASES", DEFAULT_MAX_CONTIG_BASES);
     if sequence.len() > max_contig_bases {
@@ -592,6 +617,13 @@ struct PerPrimerContigResult {
     primer_index: usize,
     hits: Vec<Hit>,
     summary: SummaryAccumulator,
+}
+
+fn validate_primers(primers: &[Primer]) -> Result<()> {
+    for primer in primers {
+        primer.validate()?;
+    }
+    Ok(())
 }
 
 fn parse_contig_name(header: &str) -> String {
@@ -934,5 +966,15 @@ mod tests {
             assert!(Primer::from_name_and_sequence(name, "ATGC").is_err());
         }
         assert!(Primer::from_name_and_sequence("p α", "ATGC").is_ok());
+    }
+
+    #[test]
+    fn public_primer_mutations_are_rejected_before_scanning() {
+        let mut primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        primer.sequence = "AT".into();
+        assert!(scan_sequence("ATG", "chr", &[primer], &ScanOptions::default()).is_err());
+        let mut primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        primer.reverse_complement = "AAAA".into();
+        assert!(scan_sequence("ATGC", "chr", &[primer], &ScanOptions::default()).is_err());
     }
 }
