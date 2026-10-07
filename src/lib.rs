@@ -650,6 +650,9 @@ fn normalize_query(raw: &str) -> Result<String> {
         if ch.is_whitespace() {
             continue;
         }
+        if !ch.is_ascii() {
+            bail!("unsupported non-ASCII base '{ch}' in primer sequence");
+        }
         let c = normalize_base(ch as u8) as char;
         if iupac_mask(c as u8).is_none() {
             bail!("unsupported base '{ch}' in primer sequence");
@@ -903,5 +906,13 @@ mod tests {
         assert_eq!(without_rc.total_hits, 1);
         assert_eq!(without_rc.hits[0].strand, '+');
         assert_eq!(without_rc.summary[0].reverse_hits, 0);
+    }
+
+    #[test]
+    fn non_ascii_primer_symbols_cannot_alias_ascii_bases() {
+        for sequence in ["Ł", "Ń", "Ŕ", "AŁGC"] {
+            assert!(Primer::from_name_and_sequence("p", sequence).is_err());
+        }
+        assert_eq!(Primer::from_name_and_sequence("p", " au gc ").unwrap().sequence, "ATGC");
     }
 }
