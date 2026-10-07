@@ -136,6 +136,7 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
     let mut names = HashSet::new();
     let mut delimiter: Option<char> = None;
     let mut row_index = 0usize;
+    let mut line_index = 0usize;
     let max_file_bytes = read_limit_from_env(
         "PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES",
         DEFAULT_MAX_PRIMER_FILE_BYTES,
@@ -154,6 +155,7 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         if read_bytes == 0 {
             break;
         }
+        line_index += 1;
         total_bytes = total_bytes.saturating_add(read_bytes);
         if total_bytes > max_file_bytes {
             bail!(
@@ -180,7 +182,7 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
         let parts: Vec<&str> = trimmed.split(del).map(str::trim).collect();
         row_index += 1;
         if parts.len() > 2 {
-            bail!("expected one sequence column or two name/sequence columns at row {} in '{}'", row_index, path.display());
+            bail!("expected one sequence column or two name/sequence columns at line {} in '{}'", line_index, path.display());
         }
 
         let (name_raw, seq_raw) = if parts.len() >= 2 {
@@ -199,12 +201,12 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
             name_raw.to_string()
         };
         if !names.insert(name.clone()) {
-            bail!("duplicate primer name '{}' at row {} in '{}'", name, row_index, path.display());
+            bail!("duplicate primer name '{}' at line {} in '{}'", name, line_index, path.display());
         }
         let primer = Primer::from_name_and_sequence(name, seq_raw).with_context(|| {
             format!(
-                "invalid primer sequence at row {} in '{}'",
-                row_index,
+                "invalid primer sequence at line {} in '{}'",
+                line_index,
                 path.display()
             )
         })?;
@@ -1013,5 +1015,11 @@ mod tests {
         assert!(panel_text("p\tATGC\tmetadata\n").is_err());
         assert!(panel_text("p,ATGC,metadata\n").is_err());
         assert_eq!(panel_text("ATGC\n").unwrap()[0].name, "primer_0001");
+    }
+
+    #[test]
+    fn panel_errors_use_physical_line_numbers() {
+        let error = panel_text("# comment\n\nname\tsequence\np\tAXGC\n").unwrap_err();
+        assert!(error.to_string().contains("line 4"));
     }
 }
