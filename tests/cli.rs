@@ -377,3 +377,32 @@ fn zero_threads_is_an_argument_error() {
     assert!(!output.status.success());
     assert!(stderr_string(&output).contains("positive integer"));
 }
+
+#[test]
+fn tsv_headers_match_the_hit_and_summary_schemas() {
+    let hits = run(&[
+        "--primers", "data/demo_primers.tsv", "--reference", "data/demo.fa",
+        "--header", "--threads", "1",
+    ]);
+    assert!(hits.status.success());
+    let text = stdout_string(&hits);
+    assert_eq!(text.lines().next().unwrap(), "file\tcontig\tprimer\tprimer_len\tstart\tend\tstrand\tmismatches\tmatched");
+    assert_eq!(text.lines().count(), 28);
+    let summary = run(&[
+        "--primers", "data/demo_primers.tsv", "--reference", "data/demo.fa",
+        "--summary", "--header", "--threads", "1",
+    ]);
+    assert!(summary.status.success());
+    assert_eq!(stdout_string(&summary).lines().next().unwrap(), "primer\tprimer_len\ttotal_hits\tperfect_hits\tforward_hits\treverse_hits\tcontigs_with_hits");
+}
+
+#[test]
+fn tsv_header_is_rejected_for_json_and_scalar_count_output() {
+    for mode in ["--json", "--count-only"] {
+        let output = run(&[
+            "--primers", "data/demo_primers.tsv", "--reference", "data/demo.fa",
+            "--header", mode,
+        ]);
+        assert!(!output.status.success());
+    }
+}

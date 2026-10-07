@@ -58,9 +58,9 @@ fn execute(cli: Cli) -> Result<()> {
     if cli.count_only {
         emit_count(scan.total_hits, cli.json)?;
     } else if cli.summary {
-        emit_summary(&scan.summary, cli.json)?;
+        emit_summary(&scan.summary, cli.json, cli.header)?;
     } else {
-        emit_hits(&scan.hits, cli.json)?;
+        emit_hits(&scan.hits, cli.json, cli.header)?;
     }
 
     Ok(())
@@ -92,6 +92,10 @@ struct Cli {
     #[arg(long)]
     json: bool,
 
+    /// Include column headings in hit or summary TSV output.
+    #[arg(long, conflicts_with_all = ["json", "count_only"])]
+    header: bool,
+
     /// Output per-primer summary rows.
     #[arg(long, conflicts_with = "count_only")]
     summary: bool,
@@ -121,8 +125,9 @@ fn available_threads() -> usize {
         .unwrap_or(1)
 }
 
-fn emit_hits(hits: &[crate::Hit], as_json: bool) -> Result<()> {
+fn emit_hits(hits: &[crate::Hit], as_json: bool, header: bool) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
+    if header { writeln!(out, "file\tcontig\tprimer\tprimer_len\tstart\tend\tstrand\tmismatches\tmatched")?; }
     for hit in hits {
         if as_json {
             writeln!(out, "{}", serde_json::to_string(hit)?)?;
@@ -146,8 +151,9 @@ fn emit_hits(hits: &[crate::Hit], as_json: bool) -> Result<()> {
     Ok(())
 }
 
-fn emit_summary(summary: &[PrimerSummary], as_json: bool) -> Result<()> {
+fn emit_summary(summary: &[PrimerSummary], as_json: bool, header: bool) -> Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
+    if header { writeln!(out, "primer\tprimer_len\ttotal_hits\tperfect_hits\tforward_hits\treverse_hits\tcontigs_with_hits")?; }
     for row in summary {
         if as_json {
             writeln!(out, "{}", serde_json::to_string(row)?)?;
