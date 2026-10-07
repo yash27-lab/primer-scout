@@ -331,3 +331,16 @@ fn contig_base_limit_enforced() {
         "stderr should mention the contig base limit, got: {stderr}"
     );
 }
+
+#[test]
+fn total_primer_budget_stops_before_parsing_the_next_record() {
+    let path = tmp_path("file-budget.tsv");
+    std::fs::write(&path, "p1\tATGC\np2\tATGC\n").unwrap();
+    let output = Command::new(bin())
+        .args(["--primers", path.to_str().unwrap(), "--reference", "data/demo.fa"])
+        .env("PRIMER_SCOUT_MAX_PRIMER_FILE_BYTES", "8")
+        .output().unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(!output.status.success());
+    assert!(stderr_string(&output).contains("exceeds safety limit of 8 bytes"));
+}

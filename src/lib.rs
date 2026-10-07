@@ -149,7 +149,7 @@ pub fn load_primers(path: &Path) -> Result<Vec<Primer>> {
 
     loop {
         line.clear();
-        let read_bytes = read_line_bounded(reader.as_mut(), &mut line, max_line_bytes)
+        let read_bytes = read_line_bounded(reader.as_mut(), &mut line, max_line_bytes.min(max_file_bytes.saturating_sub(total_bytes)))
             .with_context(|| format!("failed reading primer file '{}'", path.display()))?;
         if read_bytes == 0 {
             break;
