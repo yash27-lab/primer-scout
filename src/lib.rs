@@ -660,16 +660,18 @@ fn parse_contig_name(header: &str) -> Result<String> {
 fn open_reader(path: &Path) -> Result<Box<dyn BufRead + Send>> {
     let file =
         File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
+    let mut reader = BufReader::new(file);
+    let gzip_magic = reader.fill_buf().with_context(|| format!("failed reading input '{}'", path.display()))?.starts_with(&[0x1f, 0x8b]);
     let is_gz = path
         .extension()
         .and_then(|x| x.to_str())
         .map(|ext| ext.eq_ignore_ascii_case("gz"))
         .unwrap_or(false);
 
-    if is_gz {
-        Ok(Box::new(BufReader::new(MultiGzDecoder::new(file))))
+    if is_gz || gzip_magic {
+        Ok(Box::new(BufReader::new(MultiGzDecoder::new(reader))))
     } else {
-        Ok(Box::new(BufReader::new(file)))
+        Ok(Box::new(reader))
     }
 }
 
@@ -1087,5 +1089,20 @@ mod tests {
             assert!(scan_sequence(text, "chr", std::slice::from_ref(&primer), &options).is_err());
         }
         assert_eq!(scan_sequence("AT?C", "chr", &[primer], &options).unwrap().total_hits, 1);
+    }
+
+    #[test]
+    fn gzip_content_is_detected_without_a_gz_suffix() {
+        let file = tmp_path("compressed-reference.fa");
+        let handle = File::create(&file).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(handle, flate2::Compression::default());
+        encoder.write_all(b">chr\nATGC\n").unwrap();
+        encoder.finish().unwrap();
+        let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        let result = scan_references(std::slice::from_ref(&file), &[primer], &ScanOptions {
+            max_mismatches: 0, scan_reverse_complement: false,
+        });
+        std::fs::remove_file(file).unwrap();
+        assert_eq!(result.unwrap().total_hits, 1);
     }
 }
