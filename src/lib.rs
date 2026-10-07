@@ -37,6 +37,8 @@ impl Primer {
     }
 
     pub fn from_name_and_sequence(name: impl Into<String>, sequence: &str) -> Result<Self> {
+        let name = name.into();
+        validate_identifier(&name, "primer")?;
         let normalized = normalize_query(sequence)?;
         if normalized.is_empty() {
             bail!("primer sequence must not be empty");
@@ -47,7 +49,7 @@ impl Primer {
         let reverse_masks = to_masks(&reverse_complement)?;
 
         Ok(Self {
-            name: name.into(),
+            name,
             sequence: normalized.clone(),
             reverse_complement: reverse_complement.clone(),
             masks,
@@ -644,6 +646,16 @@ fn is_header(name: &str, sequence: &str) -> bool {
         && (right == "sequence" || right == "primer" || right == "seq")
 }
 
+fn validate_identifier(name: &str, kind: &str) -> Result<()> {
+    if name.trim().is_empty() {
+        bail!("{kind} name must not be empty");
+    }
+    if name.chars().any(char::is_control) {
+        bail!("{kind} name must not contain control characters");
+    }
+    Ok(())
+}
+
 fn normalize_query(raw: &str) -> Result<String> {
     let mut normalized = String::with_capacity(raw.len());
     for ch in raw.chars() {
@@ -914,5 +926,13 @@ mod tests {
             assert!(Primer::from_name_and_sequence("p", sequence).is_err());
         }
         assert_eq!(Primer::from_name_and_sequence("p", " au gc ").unwrap().sequence, "ATGC");
+    }
+
+    #[test]
+    fn primer_names_reject_blank_and_control_characters() {
+        for name in ["", "  ", "p\t1", "p\n1", "p\u{1b}1"] {
+            assert!(Primer::from_name_and_sequence(name, "ATGC").is_err());
+        }
+        assert!(Primer::from_name_and_sequence("p α", "ATGC").is_ok());
     }
 }
