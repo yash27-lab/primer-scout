@@ -433,6 +433,9 @@ fn scan_contig(
     primers: &[Primer],
     options: &ScanOptions,
 ) -> Result<ContigScanResult> {
+    if !sequence.is_ascii() || sequence.bytes().any(|base| base.is_ascii_control()) {
+        bail!("reference contig '{}' in '{}' contains non-ASCII or control characters", contig_name, file_name);
+    }
     let sequence_bytes: Vec<u8> = sequence.bytes().map(normalize_base).collect();
     let sequence_masks: Vec<u8> = sequence_bytes
         .iter()
@@ -1074,5 +1077,15 @@ mod tests {
         assert!(fasta_text("").is_err());
         assert!(fasta_text("\n \n").is_err());
         assert_eq!(fasta_text(">chr1\n").unwrap().total_hits, 0);
+    }
+
+    #[test]
+    fn reference_unicode_and_controls_are_rejected_without_changing_ascii_ambiguity() {
+        let primer = Primer::from_name_and_sequence("p", "ATGC").unwrap();
+        let options = ScanOptions { max_mismatches: 0, scan_reverse_complement: false };
+        for text in ["AŁGC", "AT\tGC"] {
+            assert!(scan_sequence(text, "chr", std::slice::from_ref(&primer), &options).is_err());
+        }
+        assert_eq!(scan_sequence("AT?C", "chr", &[primer], &options).unwrap().total_hits, 1);
     }
 }
