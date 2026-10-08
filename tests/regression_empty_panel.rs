@@ -1,4 +1,4 @@
-use primer_scout::{Primer, ScanOptions, scan_sequence};
+use primer_scout::{ScanOptions, scan_sequence};
 
 #[test]
 fn empty_panel() {

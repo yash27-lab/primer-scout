@@ -1,4 +1,4 @@
-use primer_scout::{Primer, ScanOptions, scan_sequence};
+use primer_scout::Primer;
 
 #[test]
 fn rna_query() {
