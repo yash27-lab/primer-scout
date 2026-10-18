@@ -3,6 +3,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sequence_alphabet() {
+        assert!(
+            generate_sequence(1000, &mut XorShift64::new(42))
+                .iter()
+                .all(|b| b"ACGT".contains(b))
+        );
+    }
+
+    #[test]
     fn sequence_length() {
         assert_eq!(generate_sequence(257, &mut XorShift64::new(42)).len(), 257);
     }
