@@ -3,6 +3,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sequence_repeatability() {
+        assert_eq!(
+            generate_sequence(100, &mut XorShift64::new(42)),
+            generate_sequence(100, &mut XorShift64::new(42))
+        );
+    }
+
+    #[test]
     fn sequence_alphabet() {
         assert!(
             generate_sequence(1000, &mut XorShift64::new(42))
