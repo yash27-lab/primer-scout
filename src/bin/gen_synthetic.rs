@@ -3,6 +3,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn empty_rng() {
+        let mut a = XorShift64::new(42);
+        generate_sequence(0, &mut a);
+        assert_eq!(a.next_u32(), XorShift64::new(42).next_u32());
+    }
+
+    #[test]
     fn cloned_rng() {
         let mut a = XorShift64::new(42);
         a.next_u32();
