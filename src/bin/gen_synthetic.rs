@@ -1,3 +1,22 @@
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_sequence() {
+        assert!(generate_sequence(0, &mut XorShift64::new(42)).is_empty());
+    }
+
+    fn fixture() -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        std::env::temp_dir().join(format!(
+            "primer_generator_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ))
+    }
+}
+
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use std::fs::File;
