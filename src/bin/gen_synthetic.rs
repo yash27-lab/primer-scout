@@ -3,6 +3,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn seed_variation() {
+        assert_ne!(
+            generate_sequence(100, &mut XorShift64::new(1)),
+            generate_sequence(100, &mut XorShift64::new(2))
+        );
+    }
+
+    #[test]
     fn sequence_repeatability() {
         assert_eq!(
             generate_sequence(100, &mut XorShift64::new(42)),
