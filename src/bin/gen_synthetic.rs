@@ -3,6 +3,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn fasta_wrapping() {
+        let path = fixture();
+        write_fasta(&path, "test", &vec![b'A'; 81]).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines[0], ">test");
+        assert_eq!(lines[1].len(), 80);
+        assert_eq!(lines[2], "A");
+    }
+
+    #[test]
     fn mutate_t() {
         let mut r = XorShift64::new(42);
         for _ in 0..100 {
