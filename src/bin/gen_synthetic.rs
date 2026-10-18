@@ -3,6 +3,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mutate_a() {
+        let mut r = XorShift64::new(42);
+        for _ in 0..100 {
+            let b = mutate_base(b'A', &mut r);
+            assert_ne!(b, b'A');
+            assert!(b"ACGT".contains(&b));
+        }
+    }
+
+    #[test]
     fn empty_rng() {
         let mut a = XorShift64::new(42);
         generate_sequence(0, &mut a);
