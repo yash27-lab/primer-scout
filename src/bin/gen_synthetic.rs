@@ -3,6 +3,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn zero_seed() {
+        let a = generate_sequence(100, &mut XorShift64::new(0));
+        assert_eq!(a, generate_sequence(100, &mut XorShift64::new(0)));
+        assert!(a.windows(2).any(|w| w[0] != w[1]));
+    }
+
+    #[test]
     fn seed_variation() {
         assert_ne!(
             generate_sequence(100, &mut XorShift64::new(1)),
