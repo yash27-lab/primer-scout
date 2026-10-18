@@ -98,9 +98,9 @@ fn write_primers(
     let mut writer = BufWriter::new(file);
     writeln!(writer, "name\tsequence")?;
 
-    let max_start = sequence.len() - primer_len;
+    let start_count = sequence.len() - primer_len + 1;
     for i in 0..primer_count {
-        let start = (rng.next_u32() as usize) % max_start;
+        let start = (rng.next_u32() as usize) % start_count;
         let mut primer = sequence[start..start + primer_len].to_vec();
 
         // Every 5th primer gets one deterministic mismatch to simulate off-target tolerant usage.
@@ -160,5 +160,144 @@ impl XorShift64 {
         x ^= x << 17;
         self.state = x;
         (x >> 32) as u32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_window() {
+        let path = fixture();
+        write_primers(&path, b"AC", 100, 1, &mut XorShift64::new(42)).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(text.lines().next(), Some("name\tsequence"));
+        assert_eq!(text.lines().count(), 101);
+        assert!(
+            text.lines()
+                .enumerate()
+                .skip(1)
+                .any(|(i, row)| (i - 1) % 5 != 0 && row.ends_with("\tC"))
+        );
+    }
+
+    #[test]
+    fn fasta_wrapping() {
+        let path = fixture();
+        write_fasta(&path, "test", &[b'A'; 81]).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines[0], ">test");
+        assert_eq!(lines[1].len(), 80);
+        assert_eq!(lines[2], "A");
+    }
+
+    #[test]
+    fn mutate_t() {
+        let mut r = XorShift64::new(42);
+        for _ in 0..100 {
+            let b = mutate_base(b'T', &mut r);
+            assert_ne!(b, b'T');
+            assert!(b"ACGT".contains(&b));
+        }
+    }
+
+    #[test]
+    fn mutate_g() {
+        let mut r = XorShift64::new(42);
+        for _ in 0..100 {
+            let b = mutate_base(b'G', &mut r);
+            assert_ne!(b, b'G');
+            assert!(b"ACGT".contains(&b));
+        }
+    }
+
+    #[test]
+    fn mutate_c() {
+        let mut r = XorShift64::new(42);
+        for _ in 0..100 {
+            let b = mutate_base(b'C', &mut r);
+            assert_ne!(b, b'C');
+            assert!(b"ACGT".contains(&b));
+        }
+    }
+
+    #[test]
+    fn mutate_a() {
+        let mut r = XorShift64::new(42);
+        for _ in 0..100 {
+            let b = mutate_base(b'A', &mut r);
+            assert_ne!(b, b'A');
+            assert!(b"ACGT".contains(&b));
+        }
+    }
+
+    #[test]
+    fn empty_rng() {
+        let mut a = XorShift64::new(42);
+        generate_sequence(0, &mut a);
+        assert_eq!(a.next_u32(), XorShift64::new(42).next_u32());
+    }
+
+    #[test]
+    fn cloned_rng() {
+        let mut a = XorShift64::new(42);
+        a.next_u32();
+        let mut b = a.clone();
+        assert_eq!(a.next_u32(), b.next_u32());
+    }
+
+    #[test]
+    fn zero_seed() {
+        let a = generate_sequence(100, &mut XorShift64::new(0));
+        assert_eq!(a, generate_sequence(100, &mut XorShift64::new(0)));
+        assert!(a.windows(2).any(|w| w[0] != w[1]));
+    }
+
+    #[test]
+    fn seed_variation() {
+        assert_ne!(
+            generate_sequence(100, &mut XorShift64::new(1)),
+            generate_sequence(100, &mut XorShift64::new(2))
+        );
+    }
+
+    #[test]
+    fn sequence_repeatability() {
+        assert_eq!(
+            generate_sequence(100, &mut XorShift64::new(42)),
+            generate_sequence(100, &mut XorShift64::new(42))
+        );
+    }
+
+    #[test]
+    fn sequence_alphabet() {
+        assert!(
+            generate_sequence(1000, &mut XorShift64::new(42))
+                .iter()
+                .all(|b| b"ACGT".contains(b))
+        );
+    }
+
+    #[test]
+    fn sequence_length() {
+        assert_eq!(generate_sequence(257, &mut XorShift64::new(42)).len(), 257);
+    }
+
+    #[test]
+    fn empty_sequence() {
+        assert!(generate_sequence(0, &mut XorShift64::new(42)).is_empty());
+    }
+
+    fn fixture() -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        std::env::temp_dir().join(format!(
+            "primer_generator_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ))
     }
 }
