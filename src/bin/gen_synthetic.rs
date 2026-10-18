@@ -98,9 +98,9 @@ fn write_primers(
     let mut writer = BufWriter::new(file);
     writeln!(writer, "name\tsequence")?;
 
-    let max_start = sequence.len() - primer_len;
+    let start_count = sequence.len() - primer_len + 1;
     for i in 0..primer_count {
-        let start = (rng.next_u32() as usize) % max_start;
+        let start = (rng.next_u32() as usize) % start_count;
         let mut primer = sequence[start..start + primer_len].to_vec();
 
         // Every 5th primer gets one deterministic mismatch to simulate off-target tolerant usage.
