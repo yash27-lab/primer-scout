@@ -3,6 +3,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sequence_length() {
+        assert_eq!(generate_sequence(257, &mut XorShift64::new(42)).len(), 257);
+    }
+
+    #[test]
     fn empty_sequence() {
         assert!(generate_sequence(0, &mut XorShift64::new(42)).is_empty());
     }
