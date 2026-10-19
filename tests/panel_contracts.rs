@@ -1,6 +1,12 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn crlf() {
+    let p = panel("name\tsequence\r\nalpha\tATGC\r\n").unwrap();
+    assert_eq!(p[0].sequence, "ATGC");
+}
+
+#[test]
 fn header_case() {
     assert_eq!(panel("NAME\tSEQUENCE\nalpha\tATGC\n").unwrap().len(), 1);
 }
