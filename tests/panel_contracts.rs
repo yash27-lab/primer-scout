@@ -1,6 +1,13 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn lowercase_rna() {
+    let p = panel("alpha\taugc\n").unwrap();
+    assert_eq!(p[0].sequence, "ATGC");
+    p[0].validate().unwrap();
+}
+
+#[test]
 fn empty_sequence() {
     assert!(panel("alpha\t\n").is_err());
 }
