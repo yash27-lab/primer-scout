@@ -1,6 +1,11 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn header_only() {
+    assert!(panel("name\tsequence\n").is_err());
+}
+
+#[test]
 fn interleaved_comments() {
     let p = panel("ATGC\n# note\n\nGCTA\n").unwrap();
     assert_eq!(p.len(), 2);
