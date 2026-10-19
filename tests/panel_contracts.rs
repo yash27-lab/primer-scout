@@ -1,6 +1,13 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn indented_comments() {
+    let p = panel("   # note\nalpha\tATGC\n").unwrap();
+    assert_eq!(p.len(), 1);
+    assert_eq!(p[0].name, "alpha");
+}
+
+#[test]
 fn iupac_panel() {
     let p = panel("alpha\tACGTRYSWKMBDHVN\n").unwrap();
     assert_eq!(p[0].sequence, "ACGTRYSWKMBDHVN");
