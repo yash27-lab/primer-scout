@@ -1,6 +1,14 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn leading_comments() {
+    assert_eq!(
+        panel("# note\n\nname\tsequence\nalpha\tATGC\n").unwrap()[0].name,
+        "alpha"
+    );
+}
+
+#[test]
 fn no_final_newline() {
     assert_eq!(panel("alpha\tATGC").unwrap()[0].sequence, "ATGC");
 }
