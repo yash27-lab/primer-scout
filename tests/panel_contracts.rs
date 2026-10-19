@@ -1,6 +1,11 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn empty_sequence() {
+    assert!(panel("alpha\t\n").is_err());
+}
+
+#[test]
 fn generated_collision() {
     assert!(panel("primer_0002\tATGC\n\tGCTA\n").is_err());
 }
