@@ -1,6 +1,11 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn generated_collision() {
+    assert!(panel("primer_0002\tATGC\n\tGCTA\n").is_err());
+}
+
+#[test]
 fn comments_only() {
     let e = panel("# note\n\n").unwrap_err();
     assert!(e.to_string().contains("no primers found"));
