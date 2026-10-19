@@ -1,6 +1,12 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn comments_only() {
+    let e = panel("# note\n\n").unwrap_err();
+    assert!(e.to_string().contains("no primers found"));
+}
+
+#[test]
 fn header_only() {
     assert!(panel("name\tsequence\n").is_err());
 }
