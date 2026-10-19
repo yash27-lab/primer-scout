@@ -1,6 +1,13 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn interleaved_comments() {
+    let p = panel("ATGC\n# note\n\nGCTA\n").unwrap();
+    assert_eq!(p.len(), 2);
+    assert_eq!(p[1].name, "primer_0002");
+}
+
+#[test]
 fn leading_comments() {
     assert_eq!(
         panel("# note\n\nname\tsequence\nalpha\tATGC\n").unwrap()[0].name,
