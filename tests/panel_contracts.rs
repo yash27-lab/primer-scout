@@ -1,6 +1,15 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn header_aliases() {
+    for h in ["name\tsequence", "primer\tseq", "id\tprimer"] {
+        let p = panel(&format!("{h}\nalpha\tATGC\n")).unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].name, "alpha");
+    }
+}
+
+#[test]
 fn csv_without_header() {
     let p = panel("alpha,ATGC\nbeta,GCTA\n").unwrap();
     assert_eq!(p.len(), 2);
