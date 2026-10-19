@@ -1,6 +1,13 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn csv_without_header() {
+    let p = panel("alpha,ATGC\nbeta,GCTA\n").unwrap();
+    assert_eq!(p.len(), 2);
+    assert_eq!(p[1].name, "beta");
+}
+
+#[test]
 fn sequence_only() {
     let p = panel("ATGC\nGCTA\n").unwrap();
     assert_eq!(p[0].name, "primer_0001");
