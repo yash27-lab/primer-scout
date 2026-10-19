@@ -1,6 +1,11 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn header_case() {
+    assert_eq!(panel("NAME\tSEQUENCE\nalpha\tATGC\n").unwrap().len(), 1);
+}
+
+#[test]
 fn header_aliases() {
     for h in ["name\tsequence", "primer\tseq", "id\tprimer"] {
         let p = panel(&format!("{h}\nalpha\tATGC\n")).unwrap();
