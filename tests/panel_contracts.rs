@@ -1,6 +1,11 @@
 use primer_scout::{Primer, load_primers};
 
 #[test]
+fn no_final_newline() {
+    assert_eq!(panel("alpha\tATGC").unwrap()[0].sequence, "ATGC");
+}
+
+#[test]
 fn crlf() {
     let p = panel("name\tsequence\r\nalpha\tATGC\r\n").unwrap();
     assert_eq!(p[0].sequence, "ATGC");
